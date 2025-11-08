@@ -1,5 +1,5 @@
 // src/pages/FundsDashboard.jsx
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { useBooking, STATUS } from "../context/BookingContext";
 import { useExpense } from "../context/ExpenseContext";
@@ -39,6 +39,16 @@ const tabs = [
 const CATEGORIES = ["Fuel", "Salary", "Rent", "Marketing", "Maintenance", "Other"];
 const TAGS = ["Urgent", "Recurring", "One-time", "Tax-deductible"];
 
+// LIVE CLOCK HOOK
+const useNow = () => {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+  return now;
+};
+
 const FundsDashboard = () => {
   const [activeTab, setActiveTab] = useState("daily");
   const { bookings = [], getStats } = useBooking();
@@ -49,7 +59,7 @@ const FundsDashboard = () => {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [selectedTags, setSelectedTags] = useState([]);
 
-  const now = new Date('2025-11-07');
+  const now = useNow(); // LIVE DATE
 
   const liveStats = useMemo(() => getStats(), [getStats]);
 
@@ -323,7 +333,7 @@ const FundsDashboard = () => {
             className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 p-8 shadow-2xl text-white"
           >
             <div className="absolute inset-0 opacity-20">
-              <div className="absolute -top-20 -left-20 w-80 h-80 bg-white rounded-full blur-3xl"></div>
+              <div className="absolute -top-20 -left-20 w-80 h-80 "></div>
               <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-white rounded-full blur-3xl"></div>
             </div>
 
@@ -346,8 +356,10 @@ const FundsDashboard = () => {
                     <span className="text-blue-100">Bookings</span>
                   </div>
                   <div className="text-blue-100">
-                    Revenue: ₹{liveStats.revenue.toLocaleString()} • Spent: ₹{expenseTotal.toLocaleString()} • Net Profit: ₹{netProfitTotal.toLocaleString()}
-                  </div>
+  Revenue: ₹{liveStats.revenue.toLocaleString()} • 
+  Spent: ₹{expenseTotal.toLocaleString()} • 
+  Net Profit: ₹{netProfitTotal.toLocaleString()}
+</div>
                 </div>
               </div>
 
@@ -530,7 +542,7 @@ const DailyFunds = ({ revenue, prevRevenue, forecast, profit, prevProfit, bookin
   <div className="space-y-6 daily-bg rounded-3xl p-6">
     <div className="flex justify-between items-center">
       <h2 className="text-2xl font-bold text-amber-800 flex items-center gap-3">
-        <Sun className="text-amber-600" /> Daily Timeline – {format(new Date('2025-11-07'), "MMM d, yyyy")}
+        <Sun className="text-amber-600" /> Daily Timeline – {format(new Date(), "MMM d, yyyy")}
       </h2>
       <div className="flex items-center gap-2 text-sm text-amber-700">
         <Clock size={16} /> Live Updates
@@ -626,7 +638,7 @@ const WeeklyFunds = ({ revenue, prevRevenue, forecast, profit, dailyData, topBoo
     <GoalProgress goal={goal} period="Weekly" color="blue" />
 
     <div className="bg-white/70 p-4 rounded-2xl shadow-lg">
-      <h3 className="font-semibold text-blue-800 mb-3">Insights</h3>
+      <h3 className="font-semibold text-blue-800 mb-aac3">Insights</h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
         <div className="text-center">
           <p className="font-bold text-blue-600">Best Day</p>
