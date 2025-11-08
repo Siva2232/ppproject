@@ -1,0 +1,228 @@
+// src/components/BookingTable.jsx (Updated with History Button)
+import { useMemo } from "react";
+import StatusBadge from "../../components/StatusBadge";
+import { format } from "date-fns";
+import {
+  Plane,
+  Bus,
+  Train,
+  Car,
+  Hotel,
+  CheckCircle,
+  XCircle,
+  Phone,
+  Globe,
+  IndianRupee,
+  Package,
+  Pencil,
+  History,   // ← NEW
+} from "lucide-react";
+
+const platformLabels = {
+  alhind: "AlHind",
+  akbar: "Akbar",
+};
+
+const BookingTable = ({ 
+  bookings = [], 
+  onUpdateStatus, 
+  onRemove, 
+  onEdit, 
+  onHistory,   // ← NEW PROP
+  darkMode = false, 
+  categoryIcons, 
+  categoryColors 
+}) => {
+
+  // Sort by date descending
+  const sortedBookings = useMemo(() => {
+    return [...bookings].sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [bookings]);
+
+  const toggleStatus = (id, current) => {
+    const next = current === "confirmed" ? "pending" : "confirmed";
+    onUpdateStatus(id, next);
+  };
+
+  return (
+    <div className={`overflow-x-auto rounded-xl border ${darkMode ? "border-gray-700" : "border-gray-200"} shadow-sm ${darkMode ? "bg-gray-800" : "bg-white"}`}>
+      <table className="min-w-full">
+        <thead className={`${darkMode ? "bg-gray-900 text-gray-400" : "bg-gray-100 text-gray-700"} text-xs uppercase tracking-wider`}>
+          <tr>
+            <th className="py-3 px-4 text-left">#</th>
+            <th className="py-3 px-4 text-left">Customer</th>
+            <th className="py-3 px-4 text-left">Contact</th>
+            <th className="py-3 px-4 text-left">Category</th>
+            <th className="py-3 px-4 text-left">Platform</th>
+            <th className="py-3 px-4 text-left">Date</th>
+            <th className="py-3 px-4 text-left">Base Pay</th>
+            <th className="py-3 px-4 text-left">Net Profit</th>
+            <th className="py-3 px-4 text-left">Revenue</th>
+            <th className="py-3 px-4 text-left">Status</th>
+            <th className="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+
+        <tbody className={`divide-y ${darkMode ? "divide-gray-700" : "divide-gray-200"}`}>
+          {sortedBookings.length === 0 ? (
+            <tr>
+              <td colSpan={11} className={`text-center py-16 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                <div className="flex flex-col items-center">
+                  <div className={`w-20 h-20 rounded-full ${darkMode ? "bg-gray-700" : "bg-gray-50"} flex items-center justify-center mb-4`}>
+                    <Package size={40} className={darkMode ? "text-gray-500" : "text-gray-400"} />
+                  </div>
+                  <p className="text-lg font-medium">No bookings available.</p>
+                </div>
+              </td>
+            </tr>
+          ) : (
+            sortedBookings.map((booking, idx) => {
+              const Icon = categoryIcons[booking.category] || categoryIcons.bus;
+              const catColor = categoryColors[booking.category] || categoryColors.bus;
+              const isConfirmed = booking.status === "confirmed";
+
+              return (
+                <tr key={booking.id} className={`hover:${darkMode ? "bg-gray-700" : "bg-gray-50"} transition`}>
+                  {/* # */}
+                  <td className={`py-3 px-4 text-sm font-medium ${darkMode ? "text-gray-400" : "text-gray-600"}`}>
+                    {idx + 1}
+                  </td>
+
+                  {/* Customer Name */}
+                  <td className={`py-3 px-4 font-medium ${darkMode ? "text-white" : "text-gray-900"}`}>
+                    {booking.customerName || "-"}
+                  </td>
+
+                  {/* Contact */}
+                  <td className={`py-3 px-4 text-sm ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                    <div className="flex items-center gap-1.5">
+                      <Phone size={14} className={darkMode ? "text-gray-500" : "text-gray-400"} />
+                      <span>{booking.contactNumber || "-"}</span>
+                    </div>
+                  </td>
+
+                  {/* Category */}
+                  <td className="py-3 px-4">
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${catColor}`}>
+                      <Icon size={14} />
+                      {booking.category
+                        ? booking.category.charAt(0).toUpperCase() + booking.category.slice(1)
+                        : "N/A"}
+                    </div>
+                  </td>
+
+                  {/* Platform */}
+                  <td className={`py-3 px-4 text-sm ${darkMode ? "text-gray-300" : "text-gray-700"}`}>
+                    <div className="flex items-center gap-1.5">
+                      <Globe size={14} className={darkMode ? "text-gray-500" : "text-gray-400"} />
+                      <span>{platformLabels[booking.platform] || booking.platform || "—"}</span>
+                    </div>
+                  </td>
+
+                  {/* Date */}
+                  <td className={`py-3 px-4 text-sm ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                    {booking.date ? format(new Date(booking.date), "MMM d, yyyy") : "-"}
+                  </td>
+
+                  {/* Base Pay */}
+                  <td className={`py-3 px-4 text-sm ${darkMode ? "text-gray-300" : "text-gray-700"}`}>
+                    <div className="flex items-center gap-1">
+                      <IndianRupee size={14} className={darkMode ? "text-gray-500" : "text-gray-400"} />
+                      ₹{Number(booking.basePay || 0).toFixed(2)}
+                    </div>
+                  </td>
+
+                  {/* Net Profit */}
+                  <td className={`py-3 px-4 text-sm font-semibold ${darkMode ? "text-emerald-400" : "text-green-700"}`}>
+                    <div className="flex items-center gap-1">
+                      <IndianRupee size={14} className={darkMode ? "text-emerald-400" : "text-green-700"} />
+                      ₹{Number(booking.netProfit || 0).toFixed(2)}
+                    </div>
+                  </td>
+
+                  {/* Total Revenue */}
+                  <td className={`py-3 px-4 text-sm font-semibold ${darkMode ? "text-emerald-400" : "text-green-700"}`}>
+                    <div className="flex items-center gap-1">
+                      <IndianRupee size={15} className={darkMode ? "text-emerald-400" : "text-green-700"} />
+                      ₹{Number(booking.totalRevenue || 0).toFixed(2)}
+                    </div>
+                  </td>
+
+                  {/* Status */}
+                  <td className="py-3 px-4">
+                    <StatusBadge status={booking.status || "pending"} darkMode={darkMode} />
+                  </td>
+
+                  {/* Actions */}
+                  <td className="py-3 px-4 text-right space-x-1.5">
+                    {/* Confirm/Unconfirm */}
+                    <button
+                      onClick={() => toggleStatus(booking.id, booking.status)}
+                      className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition font-medium ${
+                        isConfirmed
+                          ? darkMode ? "bg-amber-900/50 text-amber-400 hover:bg-amber-900/70" : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                          : darkMode ? "bg-emerald-900/50 text-emerald-400 hover:bg-emerald-900/70" : "bg-green-100 text-green-700 hover:bg-green-200"
+                      }`}
+                      title={isConfirmed ? "Mark as Pending" : "Mark as Confirmed"}
+                    >
+                      {isConfirmed ? (
+                        <>
+                          <XCircle size={15} />
+                          Unconfirm
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={15} />
+                          Confirm
+                        </>
+                      )}
+                    </button>
+
+                    {/* Edit */}
+                    <button
+                      onClick={() => onEdit(booking.id)}
+                      className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition font-medium ${
+                        darkMode ? "bg-blue-900/50 text-blue-400 hover:bg-blue-900/70" : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                      }`}
+                      title="Edit booking"
+                    >
+                      <Pencil size={15} />
+                      Edit
+                    </button>
+
+                    {/* History Button */}
+                    <button
+                      onClick={() => onHistory(booking.id)}
+                      className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition font-medium ${
+                        darkMode 
+                          ? "bg-purple-900/50 text-purple-400 hover:bg-purple-900/70" 
+                          : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                      }`}
+                      title="View edit & wallet history"
+                    >
+                      <History size={15} />
+                      History
+                    </button>
+
+                    {/* Delete */}
+                    <button
+                      onClick={() => onRemove(booking.id)}
+                      className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition font-medium ${
+                        darkMode ? "bg-red-900/50 text-red-400 hover:bg-red-900/70" : "bg-red-100 text-red-700 hover:bg-red-200"
+                      }`}
+                      title="Delete booking"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default BookingTable;

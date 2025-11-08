@@ -1,0 +1,93 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+@import "tailwindcss";
+
+/* ===== Theme Colors ===== */
+:root {
+  --color-primary-50: #fef2f2;
+  --color-primary-100: #fee2e2;
+  --color-primary-200: #fecaca;
+  --color-primary-300: #fca5a5;
+  --color-primary-400: #f87171;
+  --color-primary-500: #ef4444;
+  --color-primary-600: #dc2626;
+  --color-primary-700: #b91c1c;
+  --color-primary-800: #800000; /* main red tone */
+  --color-primary-900: #7f1d1d;
+  --color-primary-950: #450a0a;
+}
+
+/* ===== Base Styles ===== */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    overflow: hidden; /* Prevent outer scrollbars */
+    background-color: white; /* Force white background */
+  }
+
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    background-color: white; /* Force light mode background */
+    color: #1f2937; /* Neutral dark text */
+    overflow: hidden; /* Only internal layout can scroll */
+    height: 100vh;
+  }
+}
+
+/* ===== Reusable Components ===== */
+@layer components {
+  .btn-primary {
+    background-color: var(--color-primary-800);
+    color: white;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.75rem;
+    transition: background-color 0.2s;
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-primary-900);
+  }
+
+  .btn-secondary {
+    background-color: white;
+    color: var(--color-primary-800);
+    border: 2px solid var(--color-primary-800);
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.75rem;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover {
+    background-color: #fafafa;
+  }
+
+  .section-padding {
+    padding: 4rem 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .section-padding {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .section-padding {
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+
+  .container-custom {
+    max-width: 80rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Fix any auto height overrides */
+  .h-32 {
+    height: auto !important;
+  }
+}
