@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import FundsChart from "../components/FundsChart";
-import { useBooking } from "../context/BookingContext";
+import { useBooking, STATUS } from "../context/BookingContext";
 import { useFunds } from "../context/FundsContext";
 import { useExpense } from "../context/ExpenseContext";
 import { useAuth } from "../context/AuthContext";
@@ -12,7 +12,7 @@ import {
   ArrowUpRight, ArrowDownRight, Receipt, AlertTriangle,
   Moon, Sun, IndianRupee
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   format,
   startOfMonth,
@@ -36,7 +36,7 @@ import {
 } from 'recharts';
 
 const Dashboard = () => {
-  const { bookings = [], isLoading: bookingsLoading } = useBooking();
+  const { bookings = [], getStats, isLoading: bookingsLoading } = useBooking();
   const { totals = {} } = useFunds();
   const { expenses = [] } = useExpense();
   const { user } = useAuth();
@@ -47,7 +47,6 @@ const Dashboard = () => {
 
   /* ────────────────────── DATE PERIODS ────────────────────── */
   const currentPeriod = useMemo(() => {
-    // Updated to reflect the specific date: November 07, 2025
     const now = new Date('2025-11-07');
     return { start: startOfMonth(now), end: endOfMonth(now) };
   }, []);
@@ -71,26 +70,31 @@ const Dashboard = () => {
   const currentExpenseTotal = currentExpenses.reduce((s, e) => s + e.amount, 0);
   const prevExpenseTotal    = previousExpenses.reduce((s, e) => s + e.amount, 0);
 
-  /* ────────────────────── CURRENT STATS ────────────────────── */
+  /* ────────────────────── LIVE STATS FROM CONTEXT ────────────────────── */
+  const liveStats = useMemo(() => getStats(), [getStats]);
+
+  const currentConfirmedBookings = currentBookings.filter(b => b.status === STATUS.CONFIRMED);
+  const previousConfirmedBookings = previousBookings.filter(b => b.status === STATUS.CONFIRMED);
+
   const currentStats = useMemo(() => {
-    const totalRevenue = currentBookings.reduce((s, b) => s + (b.totalRevenue || 0), 0);
-    const totalBaseAmount = currentBookings.reduce((s, b) => s + (b.basePay || 0), 0); // Aligned with context field name
-    const totalNetProfit = currentBookings.reduce((s, b) => s + (b.netProfit || 0), 0);
-    const count = currentBookings.length;
+    const totalRevenue = currentConfirmedBookings.reduce((s, b) => s + (b.totalRevenue || 0), 0);
+    const totalBaseAmount = currentConfirmedBookings.reduce((s, b) => s + (b.basePay || 0), 0);
+    const totalNetProfit = currentConfirmedBookings.reduce((s, b) => s + (b.netProfit || 0), 0);
+    const count = currentConfirmedBookings.length;
     const avgRevenue = count > 0 ? totalRevenue / count : 0;
-    const highestRevenue = currentBookings.reduce((m, b) => Math.max(m, b.totalRevenue || 0), 0);
+    const highestRevenue = currentConfirmedBookings.reduce((m, b) => Math.max(m, b.totalRevenue || 0), 0);
     return { totalRevenue, totalBaseAmount, totalNetProfit, count, avgRevenue: Math.round(avgRevenue), highestRevenue };
-  }, [currentBookings]);
+  }, [currentConfirmedBookings]);
 
   const previousStats = useMemo(() => {
-    const totalRevenue = previousBookings.reduce((s, b) => s + (b.totalRevenue || 0), 0);
-    const totalBaseAmount = previousBookings.reduce((s, b) => s + (b.basePay || 0), 0); // Aligned with context field name
-    const totalNetProfit = previousBookings.reduce((s, b) => s + (b.netProfit || 0), 0);
-    const count = previousBookings.length;
+    const totalRevenue = previousConfirmedBookings.reduce((s, b) => s + (b.totalRevenue || 0), 0);
+    const totalBaseAmount = previousConfirmedBookings.reduce((s, b) => s + (b.basePay || 0), 0);
+    const totalNetProfit = previousConfirmedBookings.reduce((s, b) => s + (b.netProfit || 0), 0);
+    const count = previousConfirmedBookings.length;
     const avgRevenue = count > 0 ? totalRevenue / count : 0;
-    const highestRevenue = previousBookings.reduce((m, b) => Math.max(m, b.totalRevenue || 0), 0);
+    const highestRevenue = previousConfirmedBookings.reduce((m, b) => Math.max(m, b.totalRevenue || 0), 0);
     return { totalRevenue, totalBaseAmount, totalNetProfit, count, avgRevenue: Math.round(avgRevenue), highestRevenue };
-  }, [previousBookings]);
+  }, [previousConfirmedBookings]);
 
   const currentNetProfit = currentStats.totalNetProfit - currentExpenseTotal;
   const previousNetProfit = previousStats.totalNetProfit - prevExpenseTotal;
@@ -157,28 +161,28 @@ const Dashboard = () => {
     return sorted.map((s, i) => ({ ...s, fill: colors[i] || '#6366f1' }));
   }, [bookings]);
 
-  /* ────────────────────── CHART DATA FOR REVENUE TREND ────────────────────── */
+  /* ────────────────────── CHART DATA (12 MONTHS) ────────────────────── */
   const chartData = useMemo(() => {
     const months = [];
-    const now = new Date('2025-11-07'); // Updated to match the current date
+    const now = new Date('2025-11-07');
     for (let i = 11; i >= 0; i--) {
       const date = subMonths(now, i);
       months.push({
         month: format(date, 'MMM yy'),
         revenue: 0,
-        netProfit: 0, // New: aggregate netProfit per month
+        netProfit: 0,
         expense: 0
       });
     }
 
     bookings.forEach(b => {
-      if (b.date) {
+      if (b.date && b.status === STATUS.CONFIRMED) {
         const d = new Date(b.date);
         const monthKey = format(d, 'MMM yy');
         const idx = months.findIndex(m => m.month === monthKey);
         if (idx !== -1) {
           months[idx].revenue += (b.totalRevenue || 0);
-          months[idx].netProfit += (b.netProfit || 0); // New: aggregate netProfit
+          months[idx].netProfit += (b.netProfit || 0);
         }
       }
     });
@@ -197,8 +201,8 @@ const Dashboard = () => {
     return months.map(m => ({
       month: m.month,
       revenue: m.revenue,
-      expense: -m.expense,  // Negative for downward trend visualization
-      profit: m.netProfit - m.expense  // Updated: Use aggregated netProfit - expense
+      expense: -m.expense,
+      profit: m.netProfit - m.expense
     }));
   }, [bookings, expenses]);
 
@@ -211,7 +215,7 @@ const Dashboard = () => {
       <div className={`min-h-screen transition-colors duration-300 ${darkMode ? "bg-gray-900 text-white" : "bg-gradient-to-br from-slate-50 via-white to-indigo-50"}`}>
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
 
-          {/* ───── HEADER ───── */}
+          {/* HEADER */}
           <motion.header
             initial={{ opacity: 0, y: -30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -238,7 +242,7 @@ const Dashboard = () => {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 text-sm bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full w-fit">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span>Live • {format(new Date('2025-11-07'), "h:mm a")}</span> {/* Updated timestamp format */}
+                    <span>Live • {format(new Date('2025-11-07'), "h:mm a")}</span>
                   </div>
                   <div className="text-white/80">
                     Net Profit: <strong>₹{currentNetProfit.toLocaleString()}</strong>
@@ -253,7 +257,6 @@ const Dashboard = () => {
                   <span className="relative z-10">Export Report</span>
                 </button>
 
-                {/* Dark-mode toggle – same as Reports */}
                 <button
                   onClick={() => setDarkMode(!darkMode)}
                   className="p-3 bg-white/20 backdrop-blur-sm rounded-xl hover:bg-white/30 transition"
@@ -264,7 +267,7 @@ const Dashboard = () => {
             </div>
           </motion.header>
 
-          {/* ───── STATS CARDS ───── */}
+          {/* STATS CARDS */}
           <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-5">
             {stats.map((stat, i) => (
               <motion.div
@@ -333,7 +336,7 @@ const Dashboard = () => {
             ))}
           </div>
 
-          {/* ───── CHART + RECENT ACTIVITY ───── */}
+          {/* CHART + RECENT ACTIVITY */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Chart */}
             <motion.div
@@ -368,7 +371,7 @@ const Dashboard = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                       <XAxis dataKey="month" tick={{ fontSize: 12, fill: darkMode ? "#9ca3af" : "#64748b" }} />
                       <YAxis tick={{ fontSize: 12, fill: darkMode ? "#9ca3af" : "#64748b" }} allowDecimals={false} />
-                      <ReferenceLine y={0} stroke={refStroke} strokeDasharray="3 3" label={{ position: 'top', fill: darkMode ? '#9ca3af' : '#64748b', fontSize: 12 }} />
+                      <ReferenceLine y={0} stroke={refStroke} strokeDasharray="3 3" />
                       <Tooltip
                         formatter={(value, name) => {
                           const label = name === 'revenue' ? 'Revenue' : name === 'expense' ? 'Expenses' : 'Net Profit';
@@ -382,41 +385,10 @@ const Dashboard = () => {
                         }}
                         labelStyle={{ color: darkMode ? "#ffffff" : "#374151" }}
                       />
-                      <Legend 
-                        wrapperStyle={{ 
-                          paddingTop: '10px',
-                          fontSize: '12px',
-                          color: darkMode ? "#9ca3af" : "#64748b"
-                        }} 
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="revenue" 
-                        stroke="#10b981" 
-                        strokeWidth={3} 
-                        name="Revenue"
-                        dot={{ fill: "#10b981", strokeWidth: 2, r: 4 }}
-                        activeDot={{ r: 6, stroke: "#10b981", strokeWidth: 2 }}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="expense" 
-                        stroke="#ef4444" 
-                        strokeWidth={3} 
-                        name="Expenses"
-                        dot={{ fill: "#ef4444", strokeWidth: 2, r: 4 }}
-                        activeDot={{ r: 6, stroke: "#ef4444", strokeWidth: 2 }}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="profit" 
-                        stroke="#3b82f6" 
-                        strokeWidth={3} 
-                        name="Net Profit"
-                        strokeDasharray="5 5"
-                        dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
-                        activeDot={{ r: 6, stroke: "#3b82f6", strokeWidth: 2 }}
-                      />
+                      <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '12px', color: darkMode ? "#9ca3af" : "#64748b" }} />
+                      <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} name="Revenue" dot={{ fill: "#10b981", r: 4 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={3} name="Expenses" dot={{ fill: "#ef4444", r: 4 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="profit" stroke="#3b82f6" strokeWidth={3} name="Net Profit" strokeDasharray="5 5" dot={{ fill: "#3b82f6", r: 4 }} activeDot={{ r: 6 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -439,8 +411,8 @@ const Dashboard = () => {
                     const isHighValue = b.totalRevenue >= 50000;
                     return (
                       <div key={b.id} className={`flex items-center gap-3 p-3 rounded-xl hover:${darkMode ? "bg-gray-700" : "bg-gray-50"} transition`}>
-                        <div className={`p-2 rounded-full ${b.status?.toLowerCase() === "confirmed" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
-                          {b.status?.toLowerCase() === "confirmed" ? <UserCheck size={16} /> : <Clock size={16} />}
+                        <div className={`p-2 rounded-full ${b.status === STATUS.CONFIRMED ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
+                          {b.status === STATUS.CONFIRMED ? <UserCheck size={16} /> : <Clock size={16} />}
                         </div>
                         <div className="flex-1">
                           <p className={`text-sm font-medium ${darkMode ? "text-white" : "text-gray-800"}`}>{b.customerName}</p>
@@ -462,7 +434,7 @@ const Dashboard = () => {
             </motion.div>
           </div>
 
-          {/* ───── BOTTOM ROW ───── */}
+          {/* BOTTOM ROW */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* Recent Bookings Table */}
@@ -529,15 +501,15 @@ const Dashboard = () => {
                           <td className="px-6 py-3 text-sm font-medium text-indigo-600">#{b.id}</td>
                           <td className={`px-6 py-3 text-sm ${darkMode ? "text-white" : "text-gray-900"}`}>{b.customerName}</td>
                           <td className={`px-6 py-3 text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>{format(new Date(b.date), "MMM d, yyyy")}</td>
-                          <td className={`px-6 py-3 text-sm ${darkMode ? "text-gray-300" : "text-gray-600"}`}>₹{Number(b.basePay || 0).toLocaleString()}</td> {/* Aligned with context field */}
+                          <td className={`px-6 py-3 text-sm ${darkMode ? "text-gray-300" : "text-gray-600"}`}>₹{Number(b.basePay || 0).toLocaleString()}</td>
                           <td className={`px-6 py-3 text-sm font-bold ${darkMode ? "text-emerald-400" : "text-emerald-700"}`}>₹{Number(b.totalRevenue || 0).toLocaleString()}</td>
                           <td className="px-6 py-3">
                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                              b.status?.toLowerCase() === "confirmed"
+                              b.status === STATUS.CONFIRMED
                                 ? "bg-emerald-100 text-emerald-800"
                                 : "bg-amber-100 text-amber-800"
                             }`}>
-                              {b.status}
+                              {b.status.charAt(0).toUpperCase() + b.status.slice(1).toLowerCase()}
                             </span>
                           </td>
                         </tr>
@@ -612,7 +584,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ───── ANIMATIONS ───── */}
       <style jsx>{`
         @keyframes gradient-x {
           0%, 100% { background-position: 0% 50%; }

@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useBooking, CATEGORY, STATUS } from "../../context/BookingContext";
-import { useWallet } from "../../context/WalletContext";
+import { useWallet, WALLET_KEYS, PLATFORM } from "../../context/WalletContext";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Plus, User, Mail, Calendar, IndianRupee, CheckCircle,
@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
-// Categories
 const categories = [
   { value: CATEGORY.FLIGHT, label: "Flight", icon: Plane, color: "bg-blue-100 text-blue-700" },
   { value: CATEGORY.BUS,    label: "Bus",    icon: Bus,     color: "bg-emerald-100 text-emerald-700" },
@@ -20,12 +19,11 @@ const categories = [
   { value: CATEGORY.HOTEL,  label: "Hotel",  icon: Hotel,   color: "bg-pink-100 text-pink-700" },
 ];
 
-// Platforms (now shown for ALL categories)
 const platforms = [
   { value: "", label: "Select Platform" },
-  { value: "Alhind", label: "AlHind", walletKey: "alhind" },
-  { value: "Akbar", label: "Akbar", walletKey: "akbar" },
-  { value: "Direct", label: "Direct", walletKey: null },
+  { value: PLATFORM.ALHIND, label: "AlHind", walletKey: WALLET_KEYS.ALHIND },
+  { value: PLATFORM.AKBAR, label: "Akbar", walletKey: WALLET_KEYS.AKBAR },
+  { value: PLATFORM.DIRECT, label: "Direct", walletKey: null },
 ];
 
 const countryCodes = [
@@ -43,7 +41,7 @@ const countryCodes = [
 
 export default function AddBooking() {
   const { addBooking } = useBooking();
-  const { deductFromWallet, addToWallet, walletData } = useWallet();
+  const { applyBookingWallet, getWallet } = useWallet();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -67,33 +65,34 @@ export default function AddBooking() {
   const [walletError, setWalletError] = useState("");
 
   const fullContact = `${form.selectedCountryCode} ${form.contactNumber}`.trim();
+  const isDirect = form.platform === PLATFORM.DIRECT;
+  const isConfirmed = form.status === STATUS.CONFIRMED;
+
+  const formatBalance = (amount) => Number(amount || 0).toFixed(2);
+
+  const platformBalance = useMemo(() => {
+    if (!form.platform || isDirect) return null;
+    const p = platforms.find(p => p.value === form.platform);
+    return p?.walletKey ? formatBalance(getWallet(p.walletKey)) : null;
+  }, [form.platform, getWallet, isDirect]);
 
   const totalRevenue = useMemo(() => {
     const base = parseFloat(form.basePay) || 0;
     const comm = parseFloat(form.commissionAmount) || 0;
     const mark = parseFloat(form.markupAmount) || 0;
-    return (base + comm + mark).toFixed(2);
+    return formatBalance(base + comm + mark);
   }, [form.basePay, form.commissionAmount, form.markupAmount]);
 
   const netProfit = useMemo(() => {
+    const base = parseFloat(form.basePay) || 0;
     const comm = parseFloat(form.commissionAmount) || 0;
     const mark = parseFloat(form.markupAmount) || 0;
-    return (comm + mark).toFixed(2);
-  }, [form.commissionAmount, form.markupAmount]);
 
-  const basePayDisplay = useMemo(() => (parseFloat(form.basePay) || 0).toFixed(2), [form.basePay]);
-  const commissionDisplay = useMemo(() => (parseFloat(form.commissionAmount) || 0).toFixed(2), [form.commissionAmount]);
-  const markupDisplay = useMemo(() => (parseFloat(form.markupAmount) || 0).toFixed(2), [form.markupAmount]);
+    return isDirect
+      ? formatBalance(base + mark)  // Direct: base + markup
+      : formatBalance(comm + mark); // Indirect: commission + markup
+  }, [form.basePay, form.commissionAmount, form.markupAmount, isDirect]);
 
-  const getPlatformWalletBalance = () => {
-    if (!form.platform || form.platform === "Direct") return null;
-    const platform = platforms.find(p => p.value === form.platform);
-    if (!platform?.walletKey) return null;
-    const wallet = walletData.find(w => w.key === platform.walletKey);
-    return wallet ? wallet.amount : 0;
-  };
-
-  const platformBalance = getPlatformWalletBalance();
   const baseAmount = parseFloat(form.basePay) || 0;
 
   const validate = () => {
@@ -105,21 +104,17 @@ export default function AddBooking() {
     if (!form.date) e.date = "Date is required";
 
     const digitsOnly = form.contactNumber.replace(/\D/g, "");
-    if (digitsOnly.length < 10) {
-      e.contactNumber = "Contact number must have at least 10 digits";
-    }
-
-    // Optional: Only require platform for certain categories
-    // Remove this if you want platform optional for all
-    // if (!form.platform) e.platform = "Platform is required";
+    if (digitsOnly.length < 10) e.contactNumber = "Contact number must have at least 10 digits";
 
     if (form.basePay && Number(form.basePay) < 0) e.basePay = "Base pay cannot be negative";
     if (form.commissionAmount && Number(form.commissionAmount) < 0) e.commissionAmount = "Commission cannot be negative";
     if (form.markupAmount && Number(form.markupAmount) < 0) e.markupAmount = "Markup cannot be negative";
 
-    if (form.platform && form.platform !== "Direct" && platformBalance !== null && baseAmount > 0) {
-      if (platformBalance < baseAmount) {
-        e.basePay = `Insufficient balance in ${form.platform}. Available: ₹${platformBalance.toFixed(2)}`;
+    // Wallet validation for confirmed + non-direct
+    if (isConfirmed && !isDirect && form.platform) {
+      const p = platforms.find(p => p.value === form.platform);
+      if (p?.walletKey && getWallet(p.walletKey) < baseAmount) {
+        e.basePay = `Insufficient balance in ${form.platform}. Available: ₹${platformBalance}`;
       }
     }
 
@@ -133,56 +128,34 @@ export default function AddBooking() {
 
     setSubmitting(true);
     setWalletError("");
+
     try {
-      const base = Number(form.basePay) || 0;
-      const comm = Number(form.commissionAmount) || 0;
-      const mark = Number(form.markupAmount) || 0;
-      const totalRevenueValue = base + comm + mark;
-      const netProfitValue = comm + mark;
-
-      if (base + comm === 0 && mark > 0) {
-        console.warn("Rare case: Revenue = Markup only.");
-      }
-
-      const user = form.customerName.trim() || "Unknown Customer";
-
-      // Platform wallet operations
-      if (form.platform && form.platform !== "Direct") {
-        const platform = platforms.find(p => p.value === form.platform);
-        const platformKey = platform?.walletKey;
-
-        if (platformKey && base > 0) {
-          deductFromWallet(platformKey, base, user);
-        }
-        if (platformKey && comm > 0) {
-          addToWallet(platformKey, comm, user);
-        }
-      }
-
-      // Always credit office
-      if (base + mark > 0) {
-        addToWallet('office', base + mark, user);
-      }
-
-      await addBooking({
+      const booking = {
         customerName: form.customerName.trim(),
         email: form.email.trim(),
         contactNumber: fullContact,
         date: form.date,
-        basePay: base,
-        commissionAmount: comm,
-        markupAmount: mark,
-        totalRevenue: totalRevenueValue,
-        netProfit: netProfitValue,
-        platform: form.platform || "Direct", // fallback
+        basePay: parseFloat(form.basePay) || 0,
+        commissionAmount: parseFloat(form.commissionAmount) || 0,
+        markupAmount: parseFloat(form.markupAmount) || 0,
+        totalRevenue: parseFloat(totalRevenue),
+        netProfit: parseFloat(netProfit),
+        platform: form.platform || PLATFORM.DIRECT,
         status: form.status,
         category: form.category,
-      });
+      };
+
+      // Apply wallet deduction only if confirmed
+      if (isConfirmed) {
+        applyBookingWallet(booking, form.customerName.trim() || "User");
+      }
+
+      await addBooking(booking);
 
       setSuccess(true);
       setTimeout(() => navigate("/bookings"), 1200);
     } catch (err) {
-      setWalletError(err.message || "Failed to add booking. Wallet error.");
+      setWalletError(err.message || "Failed to add booking.");
     } finally {
       setSubmitting(false);
     }
@@ -208,9 +181,7 @@ export default function AddBooking() {
           {walletError && (
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
               <AlertCircle size={24} />
-              <div>
-                <p className="font-semibold">{walletError}</p>
-              </div>
+              <p className="font-semibold">{walletError}</p>
             </motion.div>
           )}
 
@@ -229,7 +200,7 @@ export default function AddBooking() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 sm:p-8">
             <form onSubmit={handleSubmit} className="space-y-6">
 
-              {/* Category */}
+              {/* CATEGORY */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
                   <Globe size={18} /> Travel Type
@@ -237,7 +208,8 @@ export default function AddBooking() {
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
                   {categories.map((cat) => (
                     <label key={cat.value} className={`flex flex-col items-center p-4 rounded-xl border-2 cursor-pointer transition-all ${form.category === cat.value ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-gray-400"}`}>
-                      <input type="radio" name="category" value={cat.value} checked={form.category === cat.value} onChange={(e) => setForm({ ...form, category: e.target.value, platform: "" })} className="sr-only" />
+                      <input type="radio" name="category" value={cat.value} checked={form.category === cat.value}
+                        onChange={(e) => setForm({ ...form, category: e.target.value, platform: "" })} className="sr-only" />
                       <cat.icon size={28} className={`mb-2 ${cat.color}`} />
                       <span className="text-xs sm:text-sm font-medium">{cat.label}</span>
                     </label>
@@ -245,7 +217,7 @@ export default function AddBooking() {
                 </div>
               </div>
 
-              {/* Platform - NOW SHOWN FOR ALL CATEGORIES */}
+              {/* PLATFORM */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
                   <Globe size={18} /> Booking Platform
@@ -253,64 +225,51 @@ export default function AddBooking() {
                 <select
                   value={form.platform}
                   onChange={(e) => setForm({ ...form, platform: e.target.value })}
-                  className={`w-full px-4 py-3 rounded-xl border ${errors.platform ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base"
                   disabled={submitting}
                 >
                   {platforms.map((p) => (
                     <option key={p.value} value={p.value}>{p.label}</option>
                   ))}
                 </select>
-                {errors.platform && <p className="mt-1 text-sm text-red-600">{errors.platform}</p>}
               </div>
 
-              {/* Customer Name */}
+              {/* CUSTOMER INFO */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"><User size={18} /> Customer Name</label>
-                <input type="text" value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} className={`w-full px-4 py-3 rounded-xl border ${errors.customerName ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="John Doe" disabled={submitting} />
+                <input type="text" value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.customerName ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="John Doe" disabled={submitting} />
                 {errors.customerName && <p className="mt-1 text-sm text-red-600">{errors.customerName}</p>}
               </div>
 
-              {/* Email */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"><Mail size={18} /> Email</label>
-                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={`w-full px-4 py-3 rounded-xl border ${errors.email ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="john@example.com" disabled={submitting} />
+                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.email ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="john@example.com" disabled={submitting} />
                 {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
               </div>
 
-              {/* Contact Number */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
                   <Phone size={18} /> Contact Number
                 </label>
                 <div className="flex gap-0">
                   <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                    <button type="button" onClick={() => setShowCountryDropdown(!showCountryDropdown)}
                       className="flex items-center gap-1.5 px-3 py-3 bg-gray-50 border border-gray-300 rounded-l-xl hover:bg-gray-100 transition whitespace-nowrap text-sm font-medium text-gray-700"
-                      disabled={submitting}
-                    >
+                      disabled={submitting}>
                       <span className="text-lg">{countryCodes.find(c => c.code === form.selectedCountryCode)?.flag}</span>
                       <span>{form.selectedCountryCode}</span>
                       <ChevronDown size={16} className={`transition-transform ${showCountryDropdown ? "rotate-180" : ""}`} />
                     </button>
 
                     {showCountryDropdown && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="absolute top-full left-0 mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-10"
-                      >
+                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                        className="absolute top-full left-0 mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-10">
                         {countryCodes.map((c) => (
-                          <button
-                            key={c.code}
-                            type="button"
-                            onClick={() => {
-                              setForm({ ...form, selectedCountryCode: c.code });
-                              setShowCountryDropdown(false);
-                            }}
-                            className={`w-full text-left px-3 py-2.5 flex items-center gap-2 hover:bg-gray-50 transition text-sm ${form.selectedCountryCode === c.code ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"}`}
-                          >
+                          <button key={c.code} type="button"
+                            onClick={() => { setForm({ ...form, selectedCountryCode: c.code }); setShowCountryDropdown(false); }}
+                            className={`w-full text-left px-3 py-2.5 flex items-center gap-2 hover:bg-gray-50 transition text-sm ${form.selectedCountryCode === c.code ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"}`}>
                             <span className="text-lg">{c.flag}</span>
                             <span>{c.country}</span>
                             <span className="ml-auto text-gray-500">{c.code}</span>
@@ -320,114 +279,104 @@ export default function AddBooking() {
                     )}
                   </div>
 
-                  <input
-                    type="text"
-                    value={form.contactNumber}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^\d]/g, "");
-                      setForm({ ...form, contactNumber: val });
-                    }}
+                  <input type="text" value={form.contactNumber}
+                    onChange={(e) => { const val = e.target.value.replace(/[^\d]/g, ""); setForm({ ...form, contactNumber: val }); }}
                     className={`flex-1 px-4 py-3 rounded-r-xl border ${errors.contactNumber ? "border-red-500" : "border-gray-300"} border-l-0 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`}
-                    placeholder="9876543210"
-                    disabled={submitting}
-                  />
+                    placeholder="9876543210" disabled={submitting} />
                 </div>
                 {errors.contactNumber && <p className="mt-1 text-sm text-red-600">{errors.contactNumber}</p>}
               </div>
 
-              {/* Date */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"><Calendar size={18} /> Travel/Check-in Date</label>
-                <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className={`w-full px-4 py-3 rounded-xl border ${errors.date ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} disabled={submitting} />
+                <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.date ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} disabled={submitting} />
                 {errors.date && <p className="mt-1 text-sm text-red-600">{errors.date}</p>}
               </div>
 
-              {/* Base Pay */}
+              {/* BASE PAY */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"><IndianRupee size={18} /> Base Pay</label>
-                <input type="number" min="0" step="0.01" value={form.basePay} onChange={(e) => setForm({ ...form, basePay: e.target.value })} className={`w-full px-4 py-3 rounded-xl border ${errors.basePay ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="250.00" disabled={submitting} />
+                <input type="number" min="0" step="0.01" value={form.basePay} onChange={(e) => setForm({ ...form, basePay: e.target.value })}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.basePay ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="250.00" disabled={submitting} />
                 {errors.basePay && <p className="mt-1 text-sm text-red-600">{errors.basePay}</p>}
-                {form.platform && form.platform !== "Direct" && platformBalance !== null && (
+                {form.platform && !isDirect && platformBalance !== null && isConfirmed && (
                   <p className="mt-1 text-xs text-gray-500">
-                    Available in {form.platform}: ₹{platformBalance.toFixed(2)}
-                    {platformBalance < baseAmount && baseAmount > 0 && (
+                    Available in {form.platform}: <span className="font-medium">₹{platformBalance}</span>
+                    {getWallet(platforms.find(p => p.value === form.platform)?.walletKey) < baseAmount && baseAmount > 0 && (
                       <span className="text-red-600 ml-2">Insufficient</span>
                     )}
                   </p>
                 )}
               </div>
 
-              {/* Commission & Markup */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"><IndianRupee size={18} /> Commission Amount</label>
-                <input type="number" min="0" step="0.01" value={form.commissionAmount} onChange={(e) => setForm({ ...form, commissionAmount: e.target.value })} className={`w-full px-4 py-3 rounded-xl border ${errors.commissionAmount ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="50.00" disabled={submitting} />
-                {errors.commissionAmount && <p className="mt-1 text-sm text-red-600">{errors.commissionAmount}</p>}
-              </div>
+              {/* COMMISSION */}
+              {!isDirect && (
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"><IndianRupee size={18} /> Commission Amount</label>
+                  <input type="number" min="0" step="0.01" value={form.commissionAmount}
+                    onChange={(e) => setForm({ ...form, commissionAmount: e.target.value })}
+                    className={`w-full px-4 py-3 rounded-xl border ${errors.commissionAmount ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="50.00" disabled={submitting} />
+                  {errors.commissionAmount && <p className="mt-1 text-sm text-red-600">{errors.commissionAmount}</p>}
+                </div>
+              )}
 
+              {/* MARKUP */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"><TrendingUp size={18} /> Markup Amount</label>
-                <input type="number" min="0" step="0.01" value={form.markupAmount} onChange={(e) => setForm({ ...form, markupAmount: e.target.value })} className={`w-full px-4 py-3 rounded-xl border ${errors.markupAmount ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="25.00" disabled={submitting} />
+                <input type="number" min="0" step="0.01" value={form.markupAmount}
+                  onChange={(e) => setForm({ ...form, markupAmount: e.target.value })}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.markupAmount ? "border-red-500" : "border-gray-300"} bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base`} placeholder="25.00" disabled={submitting} />
                 {errors.markupAmount && <p className="mt-1 text-sm text-red-600">{errors.markupAmount}</p>}
               </div>
 
-              {/* Status */}
+              {/* STATUS */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"><Clock size={18} /> Status</label>
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base" disabled={submitting}>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-base" disabled={submitting}>
                   <option value={STATUS.PENDING}>Pending</option>
                   <option value={STATUS.CONFIRMED}>Confirmed</option>
                   <option value={STATUS.CANCELLED}>Cancelled</option>
                 </select>
               </div>
 
-              {/* Summary */}
+              {/* SUMMARY */}
               <div className="mt-8 p-5 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-200">
                 <h3 className="text-lg font-bold text-indigo-800 mb-3 flex items-center gap-2">
                   <CheckCircle size={20} /> Applied Summary
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Base Pay:</span>
-                    <span className="font-medium">₹{basePayDisplay}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Commission:</span>
-                    <span className="font-medium">₹{commissionDisplay}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Markup:</span>
-                    <span className="font-medium">₹{markupDisplay}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Net Profit:</span>
-                    <span className="font-medium">₹{netProfit}</span>
-                  </div>
+                  <div className="flex justify-between"><span className="text-gray-600">Base Pay:</span> <span className="font-medium">₹{formatBalance(form.basePay)}</span></div>
+                  {!isDirect && <div className="flex justify-between"><span className="text-gray-600">Commission:</span> <span className="font-medium">₹{formatBalance(form.commissionAmount)}</span></div>}
+                  <div className="flex justify-between"><span className="text-gray-600">Markup:</span> <span className="font-medium">₹{formatBalance(form.markupAmount)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Net Profit:</span> <span className="font-medium">₹{netProfit}</span></div>
                   <div className="flex justify-between sm:col-span-2 border-t border-indigo-200 pt-2">
                     <span className="font-semibold text-indigo-700">Total Revenue:</span>
                     <span className="font-bold text-indigo-800 text-lg">₹{totalRevenue}</span>
                   </div>
-                  <div className="flex justify-between sm:col-span-2">
-                    <span className="text-gray-600">Platform:</span>
-                    <span className="font-medium capitalize">{platforms.find(p => p.value === form.platform)?.label || "Direct"}</span>
-                  </div>
-                  <div className="flex justify-between sm:col-span-2">
-                    <span className="text-gray-600">Contact:</span>
-                    <span className="font-medium">{fullContact || "-"}</span>
-                  </div>
+                  <div className="flex justify-between sm:col-span-2"><span className="text-gray-600">Platform:</span> <span className="font-medium capitalize">{platforms.find(p => p.value === form.platform)?.label || "Direct"}</span></div>
+                  <div className="flex justify-between sm:col-span-2"><span className="text-gray-600">Contact:</span> <span className="font-medium">{fullContact || "-"}</span></div>
                   <div className="flex justify-between sm:col-span-2">
                     <span className="text-gray-600">Status:</span>
                     <span className={`font-medium ${form.status === STATUS.CONFIRMED ? "text-emerald-700" : form.status === STATUS.CANCELLED ? "text-red-700" : "text-amber-700"}`}>
                       {form.status.charAt(0).toUpperCase() + form.status.slice(1).toLowerCase()}
                     </span>
                   </div>
+                  {isDirect && <div className="col-span-2 text-xs text-gray-500 italic">* Direct: Net Profit = Base + Markup</div>}
+                  {!isDirect && <div className="col-span-2 text-xs text-gray-500 italic">* AlHind/Akbar: Net Profit = Commission + Markup</div>}
                 </div>
               </div>
 
-              {/* Buttons */}
+              {/* BUTTONS */}
               <div className="flex gap-4 pt-6">
-                <button type="button" onClick={() => navigate("/bookings")} className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition font-medium" disabled={submitting}>Cancel</button>
-                <button type="submit" disabled={submitting} className={`flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition font-medium shadow-lg flex items-center justify-center gap-2 ${submitting ? "opacity-75 cursor-not-allowed" : ""}`}>
-                  {submitting ? <>Adding...</> : <><Plus size={20} /> Add Booking</>}
+                <button type="button" onClick={() => navigate("/bookings")}
+                  className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition font-medium"
+                  disabled={submitting}>Cancel</button>
+
+                <button type="submit" disabled={submitting}
+                  className={`flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition font-medium shadow-lg flex items-center justify-center gap-2 ${submitting ? "opacity-75 cursor-not-allowed" : ""}`}>
+                  {submitting ? "Adding..." : <><Plus size={20} /> Add Booking</>}
                 </button>
               </div>
             </form>

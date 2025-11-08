@@ -40,15 +40,9 @@ const categoryColors = {
 };
 
 const platformLabels = {
-  makemytrip: "MakeMyTrip",
-  goibibo: "Goibibo",
-  yatra: "Yatra",
-  cleartrip: "ClearTrip",
-  expedia: "Expedia",
-  bookingcom: "Booking.com",
-  agoda: "Agoda",
+  alhind: "AlHind",
+  akbar: "Akbar",
   direct: "Direct",
-  other: "Other",
 };
 
 export default function ViewBooking() {
@@ -65,7 +59,7 @@ export default function ViewBooking() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Safe number conversion with fallback
+  // Safe number conversion
   const safeNumber = (value) => {
     const num = Number(value);
     return isNaN(num) ? 0 : num;
@@ -101,8 +95,8 @@ export default function ViewBooking() {
 
   const Icon = categoryIcons[booking.category] || Package;
 
-  // Safely extract revenue fields
-  const baseAmount = safeNumber(booking.baseAmount);
+  // Extract correct fields
+  const baseAmount = safeNumber(booking.basePay);
   const commissionAmount = safeNumber(booking.commissionAmount);
   const markupAmount = safeNumber(booking.markupAmount);
   const totalRevenue = baseAmount + commissionAmount + markupAmount;

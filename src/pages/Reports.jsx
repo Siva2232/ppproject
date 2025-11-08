@@ -16,7 +16,7 @@ import html2canvas from "html2canvas";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
-import { useBooking } from "../context/BookingContext";
+import { useBooking, STATUS } from "../context/BookingContext";
 import { useExpense } from "../context/ExpenseContext";
 import DashboardLayout from "../components/DashboardLayout";
 
@@ -24,8 +24,7 @@ import {
   Download, Calendar, TrendingUp, TrendingDown, Users, DollarSign,
   FileText, Filter, BarChart3, PieChart, Activity, Target,
   ArrowUpRight, ArrowDownRight, IndianRupee, ShoppingCart,
-  FileDown, Gauge, Sparkles,
-  Fuel, Briefcase,
+  FileDown, Gauge, Sparkles, Sun, Moon,
 } from "lucide-react";
 
 import {
@@ -43,18 +42,26 @@ const REPORT_TABS = [
 ];
 
 const Reports = () => {
-  const { bookings = [] } = useBooking();
-  const { expenses = [] } = useExpense();
+  // --------------------------------------------------------------
+  // 1. LIVE CONTEXT (bookings & expenses)
+  // --------------------------------------------------------------
+  const { bookings = [] } = useBooking();          // <-- live array
+  const { expenses = [] } = useExpense();          // <-- live array
 
-  // ────────────────────── STATE ──────────────────────
+  // --------------------------------------------------------------
+  // 2. UI STATE
+  // --------------------------------------------------------------
   const [dateRange, setDateRange] = useState("thisMonth");
   const [customStart, setCustomStart] = useState(null);
   const [customEnd, setCustomEnd] = useState(null);
   const [reportTab, setReportTab] = useState("overview");
+  const [darkMode, setDarkMode] = useState(false);
 
   const reportRef = useRef(null);
 
-  // ────────────────────── DATE RANGE ──────────────────────
+  // --------------------------------------------------------------
+  // 3. DATE RANGE CALCULATION
+  // --------------------------------------------------------------
   const { start, end } = useMemo(() => {
     const now = new Date();
     let s = startOfMonth(now);
@@ -84,13 +91,15 @@ const Reports = () => {
     return { start: s, end: e };
   }, [dateRange, customStart, customEnd]);
 
-  // ────────────────────── FILTERED DATA ──────────────────────
-  const filteredBookings = useMemo(() => {
+  // --------------------------------------------------------------
+  // 4. FILTERED CONFIRMED BOOKINGS (only CONFIRMED count)
+  // --------------------------------------------------------------
+  const confirmedInRange = useMemo(() => {
     return bookings.filter(b => {
       const d = new Date(b.date);
-      return d >= start && d <= end;
+      return b.status === STATUS.CONFIRMED && d >= start && d <= end;
     });
-  }, [bookings, start, end]);
+  }, [bookings, start, end, STATUS.CONFIRMED]);
 
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
@@ -99,15 +108,18 @@ const Reports = () => {
     });
   }, [expenses, start, end]);
 
-  // ────────────────────── CORE METRICS ──────────────────────
-  const totalRevenue = filteredBookings.reduce((s, b) => s + (Number(b.totalRevenue) || 0), 0);
-  const bookingProfit = filteredBookings.reduce((s, b) => s + (Number(b.netProfit) || 0), 0);
+  // --------------------------------------------------------------
+  // 5. CORE METRICS (live)
+  // --------------------------------------------------------------
+  const totalRevenue = confirmedInRange.reduce((s, b) => s + (Number(b.totalRevenue) || 0), 0);
+  const bookingProfit = confirmedInRange.reduce((s, b) => s + (Number(b.netProfit) || 0), 0);
   const totalExpense = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const netProfit = bookingProfit - totalExpense;
   const profitMargin = totalRevenue ? Number(((netProfit / totalRevenue) * 100).toFixed(1)) : 0;
-  const bookingCount = filteredBookings.length;
+  const bookingCount = confirmedInRange.length;
   const avgBooking = bookingCount ? Math.round(totalRevenue / bookingCount) : 0;
 
+  // previous-period growth (same length)
   const prevRevenue = useMemo(() => {
     const diff = end.getTime() - start.getTime();
     const prevStart = new Date(start.getTime() - diff - 86400000);
@@ -115,30 +127,31 @@ const Reports = () => {
     return bookings
       .filter(b => {
         const d = new Date(b.date);
-        return d >= prevStart && d <= prevEnd;
+        return b.status === STATUS.CONFIRMED && d >= prevStart && d <= prevEnd;
       })
       .reduce((s, b) => s + (Number(b.totalRevenue) || 0), 0);
-  }, [bookings, start, end]);
+  }, [bookings, start, end, STATUS.CONFIRMED]);
 
   const revenueGrowth = prevRevenue
     ? Number((((totalRevenue - prevRevenue) / prevRevenue) * 100).toFixed(1))
     : 0;
 
-  // ────────────────────── DAILY REVENUE ──────────────────────
+  // --------------------------------------------------------------
+  // 6. CHART DATA (live)
+  // --------------------------------------------------------------
   const dailyRevenue = useMemo(() => {
     const days = eachDayOfInterval({ start, end });
     return days.map(day => {
-      const dayRev = filteredBookings
+      const dayRev = confirmedInRange
         .filter(b => format(new Date(b.date), "yyyy-MM-dd") === format(day, "yyyy-MM-dd"))
         .reduce((s, b) => s + (Number(b.totalRevenue) || 0), 0);
       return { date: format(day, "MMM d"), revenue: dayRev };
     });
-  }, [filteredBookings, start, end]);
+  }, [confirmedInRange, start, end]);
 
-  // ────────────────────── TOP CUSTOMERS ──────────────────────
   const topCustomers = useMemo(() => {
     const map = {};
-    filteredBookings.forEach(b => {
+    confirmedInRange.forEach(b => {
       const name = b.customerName || "Unknown";
       map[name] = (map[name] || 0) + (Number(b.totalRevenue) || 0);
     });
@@ -146,9 +159,8 @@ const Reports = () => {
       .map(([name, amount]) => ({ name, amount }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 5);
-  }, [filteredBookings]);
+  }, [confirmedInRange]);
 
-  // ────────────────────── EXPENSE BY CATEGORY ──────────────────────
   const expenseByCategory = useMemo(() => {
     const map = { Fuel: 0, Salary: 0, Rent: 0, Marketing: 0, Maintenance: 0, Other: 0 };
     filteredExpenses.forEach(e => {
@@ -162,11 +174,13 @@ const Reports = () => {
 
   const COLORS = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#6366f1"];
 
-  // ────────────────────── EXPORT CSV ──────────────────────
+  // --------------------------------------------------------------
+  // 7. EXPORT FUNCTIONS (always latest filtered data)
+  // --------------------------------------------------------------
   const exportCSV = () => {
     const headers = "Type,Date,Description,Base Pay,Revenue,Amount,Category/Customer\n";
     const rows = [
-      ...filteredBookings.map(b =>
+      ...confirmedInRange.map(b =>
         `Booking,${format(new Date(b.date), "yyyy-MM-dd")},${b.customerName || ""},${b.basePay || 0},${b.totalRevenue || 0},,${b.category || ""}`
       ),
       ...filteredExpenses.map(e =>
@@ -178,7 +192,6 @@ const Reports = () => {
     saveAs(blob, `report-${format(start, "yyyy-MM-dd")}-to-${format(end, "yyyy-MM-dd")}.csv`);
   };
 
-  // ────────────────────── EXPORT PDF ──────────────────────
   const exportPDF = async () => {
     if (!reportRef.current) return;
     try {
@@ -194,30 +207,39 @@ const Reports = () => {
     }
   };
 
-  // ────────────────────── PERFORMANCE METRICS ──────────────────────
+  // --------------------------------------------------------------
+  // 8. PERFORMANCE METRICS (live)
+  // --------------------------------------------------------------
   const performanceMetrics = useMemo(() => {
     const avgNetProfitPerBooking = bookingCount ? (bookingProfit / bookingCount).toFixed(0) : 0;
-    const avgCommissionPerBooking = bookingCount ? (filteredBookings.reduce((s, b) => s + (Number(b.commissionAmount) || 0), 0) / bookingCount).toFixed(0) : 0;
+    const avgCommissionPerBooking = bookingCount
+      ? (confirmedInRange.reduce((s, b) => s + (Number(b.commissionAmount) || 0), 0) / bookingCount).toFixed(0)
+      : 0;
 
     return [
-      { label: "Avg Net Profit/Booking", value: `₹${avgNetProfitPerBooking}`, change: "", icon: TrendingUp },
-      { label: "Avg Commission/Booking", value: `₹${avgCommissionPerBooking}`, change: "", icon: DollarSign },
-      { label: "Profit Margin", value: `${profitMargin}%`, change: "", icon: Target },
+      { label: "Avg Net Profit/Booking", value: `₹${avgNetProfitPerBooking}`, icon: TrendingUp },
+      { label: "Avg Commission/Booking", value: `₹${avgCommissionPerBooking}`, icon: DollarSign },
+      { label: "Profit Margin", value: `${profitMargin}%`, icon: Target },
     ];
-  }, [filteredBookings, bookingProfit, bookingCount, profitMargin]);
+  }, [confirmedInRange, bookingProfit, bookingCount, profitMargin]);
 
-  // ────────────────────── RENDER ──────────────────────
+  // --------------------------------------------------------------
+  // 9. RENDER
+  // --------------------------------------------------------------
   return (
     <DashboardLayout>
-      {/* ROOT – Light mode only */}
-      <div className="min-h-screen bg-gray-50 text-gray-900">
+      <div className={`min-h-screen transition-colors duration-300 ${darkMode ? "bg-gray-900 text-white" : "bg-gradient-to-br from-slate-50 via-white to-indigo-50"}`}>
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
 
           {/* HEADER */}
           <motion.header
             initial={{ opacity: 0, y: -30 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative overflow-hidden rounded-3xl p-8 shadow-2xl text-white bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600"
+            className={`relative overflow-hidden rounded-3xl p-8 shadow-2xl text-white ${
+              darkMode
+                ? "bg-gradient-to-br from-gray-800 via-gray-700 to-gray-900"
+                : "bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600"
+            }`}
           >
             <div className="absolute inset-0 opacity-20">
               <div className="absolute -top-20 -left-20 w-80 h-80 bg-white rounded-full blur-3xl"></div>
@@ -237,10 +259,14 @@ const Reports = () => {
                 </p>
                 <div className="flex flex-wrap gap-4 text-sm">
                   <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full">
-                    <Users size={16} /> {bookingCount} bookings
+                    <Users size={16} /> {bookingCount} confirmed bookings
                   </div>
                   <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full">
                     <DollarSign size={16} /> ₹{totalRevenue.toLocaleString()}
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                    <span>Live</span>
                   </div>
                 </div>
               </div>
@@ -252,6 +278,12 @@ const Reports = () => {
                 <button onClick={exportPDF} className="flex items-center gap-2 px-5 py-3 bg-white text-indigo-600 font-semibold rounded-xl shadow-md hover:shadow-lg transition">
                   <FileDown size={18} /> PDF
                 </button>
+                <button
+                  onClick={() => setDarkMode(!darkMode)}
+                  className="p-3 bg-white/20 backdrop-blur-sm rounded-xl hover:bg-white/30 transition"
+                >
+                  {darkMode ? <Sun size={18} className="text-yellow-300" /> : <Moon size={18} />}
+                </button>
               </div>
             </div>
           </motion.header>
@@ -262,7 +294,9 @@ const Reports = () => {
               <select
                 value={dateRange}
                 onChange={e => setDateRange(e.target.value)}
-                className="px-5 py-3 rounded-xl border text-sm font-medium flex items-center gap-2 shadow-sm transition bg-white/80 border-gray-200"
+                className={`px-5 py-3 rounded-xl border text-sm font-medium flex items-center gap-2 shadow-sm transition ${
+                  darkMode ? "bg-gray-800 border-gray-700 text-gray-300" : "bg-white/80 border-gray-200"
+                }`}
               >
                 <option value="thisMonth">This Month</option>
                 <option value="lastMonth">Last Month</option>
@@ -280,7 +314,9 @@ const Reports = () => {
                     startDate={customStart}
                     endDate={customEnd}
                     placeholderText="Start"
-                    className="px-4 py-2 rounded-lg border text-sm bg-white border-gray-200"
+                    className={`px-4 py-2 rounded-lg border text-sm ${
+                      darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200"
+                    }`}
                   />
                   <DatePicker
                     selected={customEnd}
@@ -290,13 +326,15 @@ const Reports = () => {
                     endDate={customEnd}
                     minDate={customStart}
                     placeholderText="End"
-                    className="px-4 py-2 rounded-lg border text-sm bg-white border-gray-200"
+                    className={`px-4 py-2 rounded-lg border text-sm ${
+                      darkMode ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200"
+                    }`}
                   />
                 </div>
               )}
             </div>
 
-            <div className="flex bg-gray-100 p-1 rounded-xl">
+            <div className={`flex p-1 rounded-xl ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
               {REPORT_TABS.map(tab => {
                 const Icon = tab.icon;
                 return (
@@ -306,7 +344,7 @@ const Reports = () => {
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
                       reportTab === tab.id
                         ? "bg-white shadow-md text-indigo-600"
-                        : "text-gray-600"
+                        : darkMode ? "text-gray-400" : "text-gray-600"
                     }`}
                   >
                     <Icon size={16} />
@@ -317,7 +355,7 @@ const Reports = () => {
             </div>
           </div>
 
-          {/* MAIN CONTENT */}
+          {/* MAIN CONTENT (live) */}
           <div ref={reportRef} className="space-y-8">
 
             {/* KPI CARDS */}
@@ -326,7 +364,7 @@ const Reports = () => {
                 { label: "Revenue", value: totalRevenue, growth: revenueGrowth, icon: DollarSign, color: "indigo" },
                 { label: "Expenses", value: totalExpense, icon: ShoppingCart, color: "rose" },
                 { label: "Net Profit", value: netProfit, margin: profitMargin, icon: Target, color: netProfit >= 0 ? "emerald" : "red" },
-                { label: "Bookings", value: bookingCount, icon: Users, color: "blue" },
+                { label: "Confirmed", value: bookingCount, icon: Users, color: "blue" },
                 { label: "Avg Booking", value: avgBooking, icon: IndianRupee, color: "amber" },
               ].map((kpi, i) => (
                 <motion.div
@@ -360,9 +398,9 @@ const Reports = () => {
               {reportTab === "overview" && (
                 <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="bg-white p-6 rounded-2xl shadow-xl">
-                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-900">
-                        <Activity size={20} className="text-indigo-600" /> Daily Revenue
+                    <div className={`p-6 rounded-2xl shadow-xl ${darkMode ? "bg-gray-800" : "bg-white"}`}>
+                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
+                        <Activity size={20} className="text-indigo-600 dark:text-indigo-400" /> Daily Revenue
                       </h3>
                       <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={dailyRevenue}>
@@ -375,9 +413,9 @@ const Reports = () => {
                       </ResponsiveContainer>
                     </div>
 
-                    <div className="bg-white p-6 rounded-2xl shadow-xl">
-                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-900">
-                        <PieChart size={20} className="text-indigo-600" /> Profit Margin
+                    <div className={`p-6 rounded-2xl shadow-xl ${darkMode ? "bg-gray-800" : "bg-white"}`}>
+                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
+                        <PieChart size={20} className="text-indigo-600 dark:text-indigo-400" /> Profit Margin
                       </h3>
                       <ResponsiveContainer width="100%" height={300}>
                         <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="90%" data={[{ value: Math.max(0, profitMargin) }]}>
@@ -385,15 +423,15 @@ const Reports = () => {
                           <Tooltip />
                         </RadialBarChart>
                       </ResponsiveContainer>
-                      <p className="text-center mt-4 text-3xl font-bold text-emerald-600">{profitMargin}%</p>
+                      <p className="text-center mt-4 text-3xl font-bold text-emerald-600 dark:text-emerald-400">{profitMargin}%</p>
                     </div>
                   </div>
                 </motion.div>
               )}
 
               {reportTab === "revenue" && (
-                <motion.div key="revenue" className="bg-white p-6 rounded-2xl shadow-xl">
-                  <h3 className="text-lg font-semibold mb-4 text-gray-900">Revenue Trend</h3>
+                <motion.div key="revenue" className={`p-6 rounded-2xl shadow-xl ${darkMode ? "bg-gray-800" : "bg-white"}`}>
+                  <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Revenue Trend</h3>
                   <ResponsiveContainer width="100%" height={400}>
                     <AreaChart data={dailyRevenue}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -407,8 +445,8 @@ const Reports = () => {
               )}
 
               {reportTab === "expenses" && (
-                <motion.div key="expenses" className="bg-white p-6 rounded-2xl shadow-xl">
-                  <h3 className="text-lg font-semibold mb-4 text-gray-900">Expense Breakdown</h3>
+                <motion.div key="expenses" className={`p-6 rounded-2xl shadow-xl ${darkMode ? "bg-gray-800" : "bg-white"}`}>
+                  <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Expense Breakdown</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <RechartsPie>
                       <Pie
@@ -431,21 +469,21 @@ const Reports = () => {
               {reportTab === "customers" && (
                 <motion.div key="customers" className="space-y-4">
                   {topCustomers.length === 0 ? (
-                    <p className="text-center text-gray-500">No customer data</p>
+                    <p className="text-center text-gray-500 dark:text-gray-400">No confirmed customers</p>
                   ) : (
                     topCustomers.map((c, i) => (
-                      <div key={i} className="bg-white p-5 rounded-xl shadow-md flex items-center justify-between">
+                      <div key={i} className={`p-5 rounded-xl shadow-md flex items-center justify-between ${darkMode ? "bg-gray-800" : "bg-white"}`}>
                         <div className="flex items-center gap-4">
                           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold">
                             {i + 1}
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900">{c.name}</p>
-                            <p className="text-sm text-gray-500">₹{c.amount.toLocaleString()}</p>
+                            <p className="font-semibold text-gray-900 dark:text-white">{c.name}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">₹{c.amount.toLocaleString()}</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-indigo-600">
+                          <p className="font-bold text-indigo-600 dark:text-indigo-400">
                             {totalRevenue > 0 ? (c.amount / totalRevenue * 100).toFixed(1) : 0}%
                           </p>
                         </div>
@@ -462,7 +500,6 @@ const Reports = () => {
                       <m.icon size={32} />
                       <p className="mt-3 text-sm opacity-90">{m.label}</p>
                       <p className="text-3xl font-bold">{m.value}</p>
-                      {m.change && <p className="text-xs mt-1 opacity-80">{m.change}</p>}
                     </div>
                   ))}
                 </motion.div>

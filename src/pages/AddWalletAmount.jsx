@@ -27,7 +27,15 @@ const walletOptions = [
 ];
 
 export default function AddWalletAmount() {
-  const { addToWallet, deductFromWallet, logTransaction, transactions, walletData } = useWallet();
+  const {
+    addToWallet,
+    deductFromWallet,
+    logTransaction,
+    transactions,
+    walletData,
+    getWallet,
+    formatWallet,
+  } = useWallet();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -42,11 +50,15 @@ export default function AddWalletAmount() {
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState("");
 
-  // Get current balance
+  // Get current balance (NUMBER)
   const currentBalance = useMemo(() => {
-    const wallet = walletData.find((w) => w.key === form.wallet);
-    return wallet ? wallet.amount : 0;
-  }, [form.wallet, walletData]);
+    return getWallet(form.wallet);
+  }, [form.wallet, getWallet]);
+
+  // Formatted balance for UI
+  const formattedBalance = useMemo(() => {
+    return formatWallet(form.wallet);
+  }, [form.wallet, formatWallet]);
 
   const validate = () => {
     const e = {};
@@ -54,7 +66,7 @@ export default function AddWalletAmount() {
     if (!form.amount || Number(form.amount) <= 0) e.amount = "Enter a valid amount";
     if (!form.name.trim()) e.name = "Name is required";
     if (form.mode === "remove" && Number(form.amount) > currentBalance) {
-      e.amount = `Insufficient balance: ₹${currentBalance.toFixed(2)}`;
+      e.amount = `Insufficient balance: ₹${formattedBalance}`;
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -94,7 +106,7 @@ export default function AddWalletAmount() {
   }, [transactions]);
 
   const copyBalance = () => {
-    navigator.clipboard.writeText(currentBalance.toFixed(2));
+    navigator.clipboard.writeText(formattedBalance);
     setCopied("balance");
     setTimeout(() => setCopied(""), 2000);
   };
@@ -236,7 +248,7 @@ export default function AddWalletAmount() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-xl text-indigo-800">
-                        ₹{currentBalance.toFixed(2)}
+                        ₹{formattedBalance}
                       </span>
                       <button
                         onClick={copyBalance}
@@ -348,11 +360,11 @@ export default function AddWalletAmount() {
                     >
                       <div className="flex items-center gap-3">
                         <div className={`p-2 rounded-lg ${
-                          t.operation === "add"
+                          t.operation === "credit"
                             ? "bg-emerald-100 text-emerald-700"
                             : "bg-red-100 text-red-700"
                         }`}>
-                          {t.operation === "add" ? <Plus size={18} /> : <Minus size={18} />}
+                          {t.operation === "credit" ? <Plus size={18} /> : <Minus size={18} />}
                         </div>
                         <div>
                           <p className="font-semibold text-gray-900">{t.user}</p>
@@ -363,9 +375,9 @@ export default function AddWalletAmount() {
                       </div>
                       <div className="text-right">
                         <p className={`font-bold ${
-                          t.operation === "add" ? "text-emerald-700" : "text-red-700"
+                          t.operation === "credit" ? "text-emerald-700" : "text-red-700"
                         }`}>
-                          {t.operation === "add" ? "+" : "-"}₹{t.amount.toFixed(2)}
+                          {t.operation === "credit" ? "+" : "-"}₹{t.amount.toFixed(2)}
                         </p>
                         <p className="text-xs text-gray-500 capitalize">{t.walletKey}</p>
                       </div>

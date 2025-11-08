@@ -81,8 +81,13 @@ export default function AllCustomers() {
 
     return Array.from(map.values()).map((cust) => {
       const sortedBookings = cust.bookings.sort((a, b) => new Date(b.date) - new Date(a.date));
+
       const totalRevenue = sortedBookings.reduce((s, b) => s + (b.totalRevenue || 0), 0);
       const netProfit = sortedBookings.reduce((s, b) => s + (b.netProfit || 0), 0);
+      const basePayTotal = sortedBookings.reduce((s, b) => s + (b.basePay || 0), 0);
+      const commissionTotal = sortedBookings.reduce((s, b) => s + (b.commissionAmount || 0), 0);
+      const markupTotal = sortedBookings.reduce((s, b) => s + (b.markupAmount || 0), 0);
+
       const confirmed = sortedBookings.filter((b) => b.status === "confirmed").length;
       const pending = sortedBookings.filter((b) => b.status === "pending").length;
       const cancelled = sortedBookings.filter((b) => b.status === "cancelled").length;
@@ -97,6 +102,9 @@ export default function AllCustomers() {
           cancelled,
           revenue: totalRevenue,
           profit: netProfit,
+          basePay: basePayTotal,
+          commission: commissionTotal,
+          markup: markupTotal,
         },
       };
     });
@@ -117,7 +125,7 @@ export default function AllCustomers() {
         if (filterStatus === "all") return true;
         return cust.bookings.some((b) => b.status === filterStatus);
       })
-      .sort((a, b) => b.stats.revenue - a.stats.revenue); // richest first
+      .sort((a, b) => b.stats.revenue - a.stats.revenue);
   }, [uniqueCustomers, searchTerm, filterStatus]);
 
   const toggleExpand = (id) => {
@@ -318,10 +326,14 @@ export default function AllCustomers() {
                                         </p>
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                      <div className="text-right">
+                                    <div className="flex items-center gap-4 text-right">
+                                      <div>
                                         <p className="font-bold text-green-700">₹{Number(b.totalRevenue).toLocaleString()}</p>
-                                        <p className="text-xs text-gray-600">Profit: ₹{Number(b.netProfit).toLocaleString()}</p>
+                                        <p className="text-xs text-gray-600">
+                                          Base: ₹{Number(b.basePay).toLocaleString()} | 
+                                          Comm: ₹{Number(b.commissionAmount).toLocaleString()} | 
+                                          Markup: ₹{Number(b.markupAmount).toLocaleString()}
+                                        </p>
                                       </div>
                                       <StatusBadge status={b.status} />
                                       <Link
