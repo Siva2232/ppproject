@@ -16,7 +16,6 @@ export const WalletProvider = ({ children }) => {
     const saved = localStorage.getItem("wallets");
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Ensure all keys exist even if saved data is incomplete
       return {
         alhind: parsed.alhind ?? 0,
         akbar: parsed.akbar ?? 0,
@@ -80,7 +79,7 @@ export const WalletProvider = ({ children }) => {
         operation, // "credit" or "debit"
         user,
         timestamp: new Date().toISOString(),
-        ...metadata, // e.g., bookingId, action
+        ...metadata, // e.g., bookingId, expenseId, action
       },
     ]);
   };
@@ -131,6 +130,20 @@ export const WalletProvider = ({ children }) => {
     }
   };
 
+  // NEW: Debit expense from office fund
+  const debitOfficeForExpense = (expense, user = "Expense Logger") => {
+    if (!expense?.amount || expense.amount <= 0) return;
+
+    const meta = {
+      expenseId: expense.id,
+      description: expense.description,
+      category: expense.category,
+      action: "expense_debit",
+    };
+
+    deductFromWallet("office", expense.amount, user, meta);
+  };
+
   // Safe wallet data for UI
   const walletData = [
     { name: "AlHind", amount: wallets.alhind ?? 0, key: "alhind" },
@@ -146,6 +159,7 @@ export const WalletProvider = ({ children }) => {
       logTransaction,
       reverseBookingWallet,
       applyBookingWallet,
+      debitOfficeForExpense,   // NEW: for expenses
       transactions,
       wallets
     }}>

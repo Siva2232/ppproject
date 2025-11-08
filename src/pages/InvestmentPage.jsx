@@ -134,7 +134,7 @@ export default function Investment() {
                 <IndianRupee className="w-8 h-8 text-white" />
               </div>
               <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                Investment Compass
+                Capital
               </h1>
               <Sparkles className="w-9 h-9 text-yellow-500 animate-pulse" />
             </div>

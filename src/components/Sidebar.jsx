@@ -36,10 +36,10 @@ const Sidebar = () => {
 
     // ✅ PARENT SECTION
     {
-      name: "Add Investments",
+      name: "Add Capital",
       icon: PlusCircle,
       children: [
-        { name: "Add Revenue", path: "/add-revenue" },
+        { name: "Manage Partners", path: "/add-revenue" },
          { name: "Manage Wallet", path: "/add-wallet-amount", icon: WalletIcon },
       ],
     },

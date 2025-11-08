@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { useExpense } from "../context/ExpenseContext";
+import { useWallet } from "../context/WalletContext";  // NEW
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Tag, Calendar, DollarSign, Clock, Receipt, AlertCircle,
@@ -14,15 +15,16 @@ import { format, isValid } from "date-fns";
 
 const CATEGORIES = ["Fuel", "Salary", "Rent", "Marketing", "Maintenance", "Other"];
 const PAYMENT_METHODS = [
-  { value: "cash", label: "Cash", icon: "💰" },
-  { value: "card", label: "Credit/Debit Card", icon: "💳" },
-  { value: "upi", label: "UPI", icon: "📱" },
-  { value: "bank_transfer", label: "Bank Transfer", icon: "🏦" },
+  { value: "cash", label: "Cash", icon: "Money" },
+  { value: "card", label: "Credit/Debit Card", icon: "Credit Card" },
+  { value: "upi", label: "UPI", icon: "Smartphone" },
+  { value: "bank_transfer", label: "Bank Transfer", icon: "Bank" },
 ];
 const TAGS = ["Urgent", "Recurring", "Tax-deductible", "One-time"];
 
 const LogExpense = () => {
   const { addExpense, expenses } = useExpense();
+  const { debitOfficeForExpense } = useWallet();   // NEW
   const navigate = useNavigate();
 
   // Form state
@@ -38,7 +40,7 @@ const LogExpense = () => {
     notes: "",
     isRecurring: false,
     tags: [],
-    attachment: null, // For receipt upload
+    attachment: null,
   });
 
   const [errors, setErrors] = useState({});
@@ -46,11 +48,11 @@ const LogExpense = () => {
   const [submitStatus, setSubmitStatus] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
-  const [searchTerm, setSearchTerm] = useState(""); // For recent search
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // Compute totals for stats
+  // Recent expenses
   const recentExpenses = useMemo(() => {
-    let filtered = expenses ? expenses.slice(-10).reverse() : []; // Last 10
+    let filtered = expenses ? expenses.slice(-10).reverse() : [];
     if (searchTerm) {
       filtered = filtered.filter(e => 
         e.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -104,6 +106,7 @@ const LogExpense = () => {
       if (!isValid(dateObj)) throw new Error("Invalid date/time");
 
       const expenseData = {
+        id: Date.now().toString(),
         description: formData.description,
         amount: Number(formData.amount),
         category: formData.category,
@@ -119,7 +122,19 @@ const LogExpense = () => {
         createdAt: new Date().toISOString(),
       };
 
+      // 1. Add to ExpenseContext
       addExpense(expenseData);
+
+      // 2. DEBIT FROM OFFICE FUND
+      try {
+        debitOfficeForExpense(expenseData, "Expense Logger");
+      } catch (err) {
+        console.error("Insufficient office fund:", err);
+        alert(err.message || "Not enough balance in Office Fund!");
+        setSubmitStatus('error');
+        setIsSubmitting(false);
+        return;
+      }
 
       setSubmitStatus('success');
 
@@ -152,7 +167,6 @@ const LogExpense = () => {
   const handleBack = () => navigate('/funds');
   const handleViewExpense = (expense) => navigate(`/view/${expense.id}`);
 
-  // Safe format function
   const safeFormat = (dateStr, fmt) => {
     const date = new Date(dateStr);
     return isValid(date) ? format(date, fmt) : 'Invalid Date';
@@ -177,7 +191,7 @@ const LogExpense = () => {
           <motion.form onSubmit={handleSubmit} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-2xl shadow-2xl p-6 space-y-6 border border-red-100 overflow-hidden">
             
-            {/* Basic Info Section */}
+            {/* Basic Info */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 border-b border-red-200 pb-2">
                 <FileText className="text-red-500" />
@@ -221,7 +235,7 @@ const LogExpense = () => {
               </div>
             </div>
 
-            {/* Timing Section */}
+            {/* Timing */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 border-b border-red-200 pb-2">
                 <Clock className="text-red-500" />
@@ -265,7 +279,7 @@ const LogExpense = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
                       <select name="paymentMethod" value={formData.paymentMethod} onChange={handleChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 transition-all">
+                        classNameure="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 transition-all">
                         {PAYMENT_METHODS.map(method => (
                           <option key={method.value} value={method.value}>{method.icon} {method.label}</option>
                         ))}
@@ -284,7 +298,6 @@ const LogExpense = () => {
                         placeholder="Where was it incurred?" />
                     </div>
                   </div>
-                  {/* Tags */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
                     <div className="flex flex-wrap gap-2">
@@ -303,12 +316,12 @@ const LogExpense = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                     <textarea name="notes" value={formData.notes} onChange={handleChange} rows={3}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 transition-all"
-                      placeholder="Additional details or receipts info" />
+                      placeholder="Additional details" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2 cursor-pointer">
                       <Upload size={16} />
-                      Attach Receipt (optional)
+                      Attach Receipt
                     </label>
                     <input type="file" name="attachment" onChange={handleChange}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 transition-all"
@@ -319,7 +332,7 @@ const LogExpense = () => {
               )}
             </AnimatePresence>
 
-            {/* Submit Buttons */}
+            {/* Submit */}
             <div className="flex flex-col sm:flex-row justify-between gap-4 pt-6 border-t border-gray-200">
               <button type="button" onClick={handleBack}
                 className="px-6 py-3 text-gray-600 font-medium rounded-xl hover:bg-gray-100 transition flex-1 sm:flex-none">
@@ -334,7 +347,7 @@ const LogExpense = () => {
             </div>
           </motion.form>
 
-          {/* Recent Expenses Section with Stats */}
+          {/* Recent Expenses */}
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white rounded-2xl shadow-2xl p-6 border border-gray-100">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
@@ -349,7 +362,6 @@ const LogExpense = () => {
                 </button>
               </div>
             </div>
-            {/* Stats Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-4 bg-red-50 rounded-xl">
               <div className="text-center">
                 <p className="text-2xl font-bold text-red-600">-₹{totalSpent.toLocaleString()}</p>
@@ -395,25 +407,25 @@ const LogExpense = () => {
             </div>
           </motion.div>
 
-          {/* Submit Status */}
+          {/* Status */}
           <AnimatePresence mode="wait">
             {submitStatus === 'success' && (
-              <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
                 className="bg-green-50 border border-green-200 rounded-2xl p-6 flex items-center gap-3 shadow-lg">
-                <CheckCircle className="text-green-500 flex-shrink-0" size={24} />
+                <CheckCircle className="text-green-500" size={24} />
                 <div>
-                  <p className="font-semibold text-green-800 text-lg">Expense logged successfully!</p>
-                  <p className="text-green-600 text-sm">Check recent expenses below or add another.</p>
+                  <p className="font-semibold text-green-800 text-lg">Expense logged & debited from Office Fund!</p>
+                  <p className="text-green-600 text-sm">Check balance in Funds page.</p>
                 </div>
               </motion.div>
             )}
             {submitStatus === 'error' && (
-              <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
                 className="bg-red-50 border border-red-200 rounded-2xl p-6 flex items-center gap-3 shadow-lg">
-                <AlertTriangle className="text-red-500 flex-shrink-0" size={24} />
+                <AlertTriangle className="text-red-500" size={24} />
                 <div>
                   <p className="font-semibold text-red-800 text-lg">Error logging expense.</p>
-                  <p className="text-red-600 text-sm">Please check the form and try again.</p>
+                  <p className="text-red-600 text-sm">Check form or office fund balance.</p>
                 </div>
               </motion.div>
             )}
