@@ -81,11 +81,20 @@ export default function AllCustomers() {
     return Array.from(map.values()).map((cust) => {
       const sortedBookings = cust.bookings.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-      const totalRevenue = sortedBookings.reduce((s, b) => s + (b.totalRevenue || 0), 0);
-      const netProfit = sortedBookings.reduce((s, b) => s + (b.netProfit || 0), 0);
+      // Calculate profit per booking with DIRECT logic
+      const profitPerBooking = sortedBookings.map(b => {
+        if (b.platform === "direct") {
+          return b.markupAmount || 0; // Only markup
+        }
+        return (b.commissionAmount || 0) + (b.markupAmount || 0); // Both
+      });
+
+      const netProfit = profitPerBooking.reduce((s, p) => s + p, 0);
       const basePayTotal = sortedBookings.reduce((s, b) => s + (b.basePay || 0), 0);
       const commissionTotal = sortedBookings.reduce((s, b) => s + (b.commissionAmount || 0), 0);
       const markupTotal = sortedBookings.reduce((s, b) => s + (b.markupAmount || 0), 0);
+
+      const totalRevenue = sortedBookings.reduce((s, b) => s + (b.totalRevenue || 0), 0);
 
       const confirmed = sortedBookings.filter((b) => b.status === "confirmed").length;
       const pending = sortedBookings.filter((b) => b.status === "pending").length;
@@ -307,6 +316,11 @@ export default function AllCustomers() {
                                 const Icon = categoryIcons[b.category] || Package;
                                 const color = categoryColors[b.category] || "bg-gray-100 text-gray-700";
 
+                                // Calculate profit for this booking
+                                const profit = b.platform === "direct"
+                                  ? (b.markupAmount || 0)
+                                  : (b.commissionAmount || 0) + (b.markupAmount || 0);
+
                                 return (
                                   <div
                                     key={b.id}
@@ -331,7 +345,8 @@ export default function AllCustomers() {
                                         <p className="text-xs text-gray-600">
                                           Base: ₹{Number(b.basePay).toLocaleString()} | 
                                           Comm: ₹{Number(b.commissionAmount).toLocaleString()} | 
-                                          Markup: ₹{Number(b.markupAmount).toLocaleString()}
+                                          Markup: ₹{Number(b.markupAmount).toLocaleString()} | 
+                                          <span className="font-medium text-indigo-700">Profit: ₹{profit.toLocaleString()}</span>
                                         </p>
                                       </div>
                                       <StatusBadge status={b.status} />

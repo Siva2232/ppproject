@@ -33,38 +33,49 @@ const Task = () => {
   const [showHistory, setShowHistory] = useState(false);
 
   const editRefs = useRef({});
-  const notifiedRef = useRef(new Set());
+  const lastAlertRef = useRef({}); // { taskId: { today: timestamp, tomorrow: timestamp } }
 
   const { addNotification } = useNotifications();
   const { tasks, history, addTask, toggleTask, updateTask, deleteTask, clearCompleted } = useTaskContext();
   const { user } = useAuth();
 
-  // DUE-DATE ALERTS ONLY
+  // RE-ALERT EVERY 2 HOURS IF NOT COMPLETED
   const checkDueDates = useCallback(() => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    const TWO_HOURS = 2 * 60 * 60 * 1000; // 2 hours in ms
+
     tasks.forEach(task => {
-      if (task.completed || !task.dueDate || notifiedRef.current.has(task.id)) return;
+      if (task.completed || !task.dueDate) return;
 
       const due = new Date(task.dueDate);
       const dueDateOnly = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+      const isToday = dueDateOnly.getTime() === today.getTime();
+      const isTomorrow = dueDateOnly.getTime() === tomorrow.getTime();
 
-      if (dueDateOnly.getTime() === today.getTime()) {
-        addNotification(`Due today: "${task.title}"`, "warning");
-        notifiedRef.current.add(task.id);
-      } else if (dueDateOnly.getTime() === tomorrow.getTime()) {
-        addNotification(`Due tomorrow: "${task.title}"`, "info");
-        notifiedRef.current.add(task.id);
+      if (!isToday && !isTomorrow) return;
+
+      const key = isToday ? "today" : "tomorrow";
+      const last = lastAlertRef.current[task.id]?.[key] || 0;
+      const timeSinceLast = now.getTime() - last;
+
+      // Send alert if: never sent OR >2 hours since last
+      if (timeSinceLast === 0 || timeSinceLast > TWO_HOURS) {
+        addNotification(`Due ${isToday ? "today" : "tomorrow"}: "${task.title}"`, isToday ? "warning" : "info");
+
+        // Update last alert time
+        if (!lastAlertRef.current[task.id]) lastAlertRef.current[task.id] = {};
+        lastAlertRef.current[task.id][key] = now.getTime();
       }
     });
   }, [tasks, addNotification]);
 
   useEffect(() => {
     checkDueDates();
-    const id = setInterval(checkDueDates, 60_000);
+    const id = setInterval(checkDueDates, 30_000); // Check every 30 seconds
     return () => clearInterval(id);
   }, [checkDueDates]);
 
@@ -92,7 +103,7 @@ const Task = () => {
       createdAt: new Date().toISOString(),
     };
 
-    addTask(newTask); // NOTIFICATION IN CONTEXT
+    addTask(newTask);
     setTitle(""); setDueDate(""); setAssigneeId(""); setPriority("medium");
   };
 
@@ -113,15 +124,14 @@ const Task = () => {
       assigneeColor: member?.color || "",
       priority: refs.priority?.value || oldTask.priority,
     };
-    updateTask(id, updates); // NOTIFICATION IN CONTEXT
+    updateTask(id, updates);
     delete editRefs.current[id];
     setEditingId(null);
   };
 
-  // DELETE — USES CONTEXT (NO DUPLICATES)
   const handleDelete = (id) => {
     if (window.confirm("Delete this task permanently?")) {
-      deleteTask(id); // NOTIFICATION IN CONTEXT
+      deleteTask(id);
     }
   };
 
