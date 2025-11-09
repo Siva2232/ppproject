@@ -1,5 +1,5 @@
 // src/pages/FundsDashboard.jsx
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { useBooking, STATUS } from "../context/BookingContext";
 import { useExpense } from "../context/ExpenseContext";
@@ -39,11 +39,11 @@ const tabs = [
 const CATEGORIES = ["Fuel", "Salary", "Rent", "Marketing", "Maintenance", "Other"];
 const TAGS = ["Urgent", "Recurring", "One-time", "Tax-deductible"];
 
-// LIVE CLOCK HOOK
+// LIVE CLOCK HOOK - Updates every second
 const useNow = () => {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 60_000);
+    const interval = setInterval(() => setNow(new Date()), 1_000);
     return () => clearInterval(interval);
   }, []);
   return now;
@@ -58,14 +58,15 @@ const FundsDashboard = () => {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [selectedTags, setSelectedTags] = useState([]);
+  const [isRecurring, setIsRecurring] = useState(false);
 
-  const now = useNow(); // LIVE DATE
+  const now = useNow(); // LIVE DATE - updates every second
 
-  const liveStats = useMemo(() => getStats(), [getStats]);
+  const liveStats = useMemo(() => getStats(), [getStats, bookings, expenses]);
 
   const confirmedBookings = useMemo(
     () => bookings.filter(b => b.status === STATUS.CONFIRMED),
-    [bookings]
+    [bookings, STATUS.CONFIRMED]
   );
 
   const recentBookings = useMemo(
@@ -94,7 +95,7 @@ const FundsDashboard = () => {
     const calc = (start, end) =>
       confirmedBookings.reduce((sum, b) => {
         const d = new Date(b.date);
-        return d >= start && d <= end ? sum + Number(b.totalRevenue) : sum;
+        return d >= start && d <= end ? sum + (Number(b.totalRevenue) || 0) : sum;
       }, 0);
 
     return {
@@ -131,7 +132,7 @@ const FundsDashboard = () => {
     const calc = (start, end) =>
       confirmedBookings.reduce((sum, b) => {
         const d = new Date(b.date);
-        return d >= start && d <= end ? sum + Number(b.netProfit) : sum;
+        return d >= start && d <= end ? sum + (Number(b.netProfit) || 0) : sum;
       }, 0);
 
     return {
@@ -146,19 +147,20 @@ const FundsDashboard = () => {
     };
   }, [confirmedBookings, now]);
 
-  /* ==================== EXPENSES PER PERIOD ==================== */
-  const periodExpenses = (start, end) =>
+  /* ==================== EXPENSES PER PERIOD (MEMOIZED) ==================== */
+  const periodExpenses = useCallback((start, end) =>
     expenses.reduce((sum, e) => {
       const d = new Date(e.date);
       return d >= start && d <= end ? sum + e.amount : sum;
-    }, 0);
+    }, 0),
+  [expenses]);
 
   const profit = useMemo(() => ({
     daily: netProfitByPeriod.daily - periodExpenses(startOfDay(now), endOfDay(now)),
     weekly: netProfitByPeriod.weekly - periodExpenses(startOfWeek(now, { weekStartsOn: 1 }), endOfWeek(now, { weekStartsOn: 1 })),
     monthly: netProfitByPeriod.monthly - periodExpenses(startOfMonth(now), endOfMonth(now)),
     yearly: netProfitByPeriod.yearly - periodExpenses(startOfYear(now), endOfYear(now)),
-  }), [netProfitByPeriod, expenses, now]);
+  }), [netProfitByPeriod, periodExpenses, now]);
 
   const netProfitTotal = liveStats.netProfitTotal;
 
@@ -189,7 +191,7 @@ const FundsDashboard = () => {
                  d.getFullYear() === now.getFullYear() &&
                  d.getHours() === h.getHours();
         })
-        .reduce((s, b) => s + Number(b.totalRevenue), 0);
+        .reduce((s, b) => s + (Number(b.totalRevenue) || 0), 0);
       return { hour: format(h, 'HH:00'), revenue: rev };
     });
   }, [confirmedBookings, now]);
@@ -207,12 +209,12 @@ const FundsDashboard = () => {
                d.getMonth() === day.getMonth() &&
                d.getFullYear() === day.getFullYear();
       });
-      const rev = dayBookings.reduce((s, b) => s + Number(b.totalRevenue), 0);
-      const profitDay = dayBookings.reduce((s, b) => s + Number(b.netProfit), 0);
+      const rev = dayBookings.reduce((s, b) => s + (Number(b.totalRevenue) || 0), 0);
+      const profitDay = dayBookings.reduce((s, b) => s + (Number(b.netProfit) || 0), 0);
       const exp = periodExpenses(startOfDay(day), endOfDay(day));
       return { day: format(day, 'EEE d'), revenue: rev, profit: profitDay - exp };
     });
-  }, [confirmedBookings, expenses, now]);
+  }, [confirmedBookings, expenses, now, periodExpenses]);
 
   /* ==================== MONTHLY HEATMAP ==================== */
   const monthlyHeatmap = useMemo(() => {
@@ -227,7 +229,7 @@ const FundsDashboard = () => {
                  d.getMonth() === day.getMonth() &&
                  d.getDate() === day.getDate();
         })
-        .reduce((s, b) => s + Number(b.totalRevenue), 0);
+        .reduce((s, b) => s + (Number(b.totalRevenue) || 0), 0);
       return { day: day.getDate(), revenue: rev };
     });
   }, [confirmedBookings, now]);
@@ -241,12 +243,12 @@ const FundsDashboard = () => {
         const d = new Date(b.date);
         return d >= s && d <= e;
       });
-      const rev = monthBookings.reduce((s, b) => s + Number(b.totalRevenue), 0);
-      const net = monthBookings.reduce((s, b) => s + Number(b.netProfit), 0);
+      const rev = monthBookings.reduce((s, b) => s + (Number(b.totalRevenue) || 0), 0);
+      const net = monthBookings.reduce((s, b) => s + (Number(b.netProfit) || 0), 0);
       const exp = periodExpenses(s, e);
       return { month: format(m, 'MMM'), revenue: rev, profit: net - exp };
     });
-  }, [confirmedBookings, expenses, now]);
+  }, [confirmedBookings, expenses, now, periodExpenses]);
 
   /* ==================== GOALS ==================== */
   const goals = useMemo(() => ({
@@ -257,14 +259,15 @@ const FundsDashboard = () => {
   }), [revenueByPeriod]);
 
   /* ==================== TOP BOOKINGS ==================== */
-  const topBookings = (start, end, limit = 5) =>
+  const topBookings = useCallback((start, end, limit = 5) =>
     confirmedBookings
       .filter(b => {
         const d = new Date(b.date);
         return d >= start && d <= end;
       })
-      .sort((a, b) => Number(b.totalRevenue) - Number(a.totalRevenue))
-      .slice(0, limit);
+      .sort((a, b) => (Number(b.totalRevenue) || 0) - (Number(a.totalRevenue) || 0))
+      .slice(0, limit),
+  [confirmedBookings]);
 
   /* ==================== EXPENSE CATEGORIES ==================== */
   const categoryTotals = useMemo(() => {
@@ -289,7 +292,7 @@ const FundsDashboard = () => {
   const [showRecurring, setShowRecurring] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
 
-  const handleAddExpense = (e, isRecurring = false) => {
+  const handleAddExpense = (e) => {
     e.preventDefault();
     if (desc.trim() && amount > 0) {
       if (editingExpense) {
@@ -298,7 +301,7 @@ const FundsDashboard = () => {
       } else {
         addExpense(desc.trim(), Number(amount), category, selectedTags, isRecurring);
       }
-      setDesc(""); setAmount(""); setCategory(CATEGORIES[0]); setSelectedTags([]);
+      setDesc(""); setAmount(""); setCategory(CATEGORIES[0]); setSelectedTags([]); setIsRecurring(false);
     }
   };
 
@@ -308,9 +311,16 @@ const FundsDashboard = () => {
     setAmount(exp.amount.toString());
     setCategory(exp.category);
     setSelectedTags(exp.tags || []);
+    setIsRecurring(exp.isRecurring || false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingExpense(null);
+    setDesc(""); setAmount(""); setCategory(CATEGORIES[0]); setSelectedTags([]); setIsRecurring(false);
   };
 
   const exportCSV = () => {
+    const currentNow = new Date();
     const headers = "Type,Date,Description,Base Pay,Revenue,Amount,Category,Tags\n";
     const rows = [
       ...confirmedBookings.map(b => `Booking,${format(new Date(b.date), "yyyy-MM-dd")},${b.customerName},${b.basePay || 0},${b.totalRevenue || 0},,,`),
@@ -318,7 +328,7 @@ const FundsDashboard = () => {
     ];
     const csv = headers + rows.join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
-    saveAs(blob, `financial-report-${format(now, "yyyy-MM-dd")}.csv`);
+    saveAs(blob, `financial-report-${format(currentNow, "yyyy-MM-dd")}.csv`);
   };
 
   return (
@@ -333,7 +343,7 @@ const FundsDashboard = () => {
             className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 p-8 shadow-2xl text-white"
           >
             <div className="absolute inset-0 opacity-20">
-              <div className="absolute -top-20 -left-20 w-80 h-80 "></div>
+              <div className="absolute -top-20 -left-20 w-80 h-80 bg-white rounded-full blur-3xl"></div>
               <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-white rounded-full blur-3xl"></div>
             </div>
 
@@ -356,10 +366,10 @@ const FundsDashboard = () => {
                     <span className="text-blue-100">Bookings</span>
                   </div>
                   <div className="text-blue-100">
-  Revenue: ₹{liveStats.revenue.toLocaleString()} • 
-  Spent: ₹{expenseTotal.toLocaleString()} • 
-  Net Profit: ₹{netProfitTotal.toLocaleString()}
-</div>
+                    Revenue: ₹{liveStats.revenue.toLocaleString()} • 
+                    Spent: ₹{expenseTotal.toLocaleString()} • 
+                    Net Profit: ₹{netProfitTotal.toLocaleString()}
+                  </div>
                 </div>
               </div>
 
@@ -459,6 +469,7 @@ const FundsDashboard = () => {
                   hourlyData={hourlyData}
                   topBookings={topBookings(startOfDay(now), endOfDay(now))}
                   goal={goals.daily}
+                  now={now}
                 />
               )}
               {activeTab === "weekly" && (
@@ -504,12 +515,14 @@ const FundsDashboard = () => {
                   amount={amount} setAmount={setAmount}
                   category={category} setCategory={setCategory}
                   selectedTags={selectedTags} setSelectedTags={setSelectedTags}
+                  isRecurring={isRecurring} setIsRecurring={setIsRecurring}
                   expenseTotal={expenseTotal}
                   categoryTotals={categoryTotals}
                   showRecurring={showRecurring}
                   setShowRecurring={setShowRecurring}
                   editingExpense={editingExpense}
                   handleEditExpense={handleEditExpense}
+                  handleCancelEdit={handleCancelEdit}
                   exportCSV={exportCSV}
                 />
               )}
@@ -537,12 +550,11 @@ const FundsDashboard = () => {
 
 /* ==================== PURE PRESENTATIONAL COMPONENTS ==================== */
 
-/* DAILY */
-const DailyFunds = ({ revenue, prevRevenue, forecast, profit, prevProfit, bookingStats, hourlyData, topBookings, goal }) => (
+const DailyFunds = ({ revenue, prevRevenue, forecast, profit, prevProfit, bookingStats, hourlyData, topBookings, goal, now }) => (
   <div className="space-y-6 daily-bg rounded-3xl p-6">
     <div className="flex justify-between items-center">
       <h2 className="text-2xl font-bold text-amber-800 flex items-center gap-3">
-        <Sun className="text-amber-600" /> Daily Timeline – {format(new Date(), "MMM d, yyyy")}
+        <Sun className="text-amber-600" /> Daily Timeline – {format(now, "MMM d, yyyy")}
       </h2>
       <div className="flex items-center gap-2 text-sm text-amber-700">
         <Clock size={16} /> Live Updates
@@ -605,7 +617,6 @@ const DailyFunds = ({ revenue, prevRevenue, forecast, profit, prevProfit, bookin
   </div>
 );
 
-/* WEEKLY */
 const WeeklyFunds = ({ revenue, prevRevenue, forecast, profit, dailyData, topBookings, goal }) => (
   <div className="space-y-6 weekly-bg rounded-3xl p-6">
     <h2 className="text-2xl font-bold text-blue-800 flex items-center gap-3">
@@ -638,7 +649,7 @@ const WeeklyFunds = ({ revenue, prevRevenue, forecast, profit, dailyData, topBoo
     <GoalProgress goal={goal} period="Weekly" color="blue" />
 
     <div className="bg-white/70 p-4 rounded-2xl shadow-lg">
-      <h3 className="font-semibold text-blue-800 mb-aac3">Insights</h3>
+      <h3 className="font-semibold text-blue-800 mb-3">Insights</h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
         <div className="text-center">
           <p className="font-bold text-blue-600">Best Day</p>
@@ -661,7 +672,6 @@ const WeeklyFunds = ({ revenue, prevRevenue, forecast, profit, dailyData, topBoo
   </div>
 );
 
-/* MONTHLY */
 const MonthlyFunds = ({ revenue, prevRevenue, forecast, profit, topBookings, goal, heatmap }) => {
   const maxRevenue = Math.max(...heatmap.map(d => d.revenue), 1);
   const trendData = heatmap.map(d => ({ label: d.day, value: d.revenue }));
@@ -731,7 +741,6 @@ const MonthlyFunds = ({ revenue, prevRevenue, forecast, profit, topBookings, goa
   );
 };
 
-/* YEARLY */
 const YearlyFunds = ({ revenue, prevRevenue, forecast, profit, monthlyData, topBookings, goal }) => (
   <div className="space-y-6 yearly-bg rounded-3xl p-6">
     <h2 className="text-2xl font-bold text-purple-800 flex items-center gap-3">
@@ -807,12 +816,12 @@ const YearlyFunds = ({ revenue, prevRevenue, forecast, profit, monthlyData, topB
   </div>
 );
 
-/* EXPENSE TRACKER */
 const ExpenseTracker = ({
   expenses, recurringExpenses, removeExpense, handleAddExpense,
   desc, setDesc, amount, setAmount, category, setCategory,
-  selectedTags, setSelectedTags, expenseTotal, categoryTotals,
-  showRecurring, setShowRecurring, editingExpense, handleEditExpense, exportCSV
+  selectedTags, setSelectedTags, isRecurring, setIsRecurring,
+  expenseTotal, categoryTotals, showRecurring, setShowRecurring,
+  editingExpense, handleEditExpense, handleCancelEdit, exportCSV
 }) => (
   <div className="space-y-6 expenses-bg rounded-3xl p-6">
     <div className="flex justify-between items-center">
@@ -823,7 +832,7 @@ const ExpenseTracker = ({
     </div>
 
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white/70 p-6 rounded-2xl shadow-lg border border-red-100">
-      <form onSubmit={e => handleAddExpense(e, true)} className="space-y-4">
+      <form onSubmit={handleAddExpense} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <input type="text" placeholder="Description *" value={desc} onChange={e => setDesc(e.target.value)} className="p-3 rounded-xl border border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-200" />
           <input type="number" placeholder="Amount *" value={amount} onChange={e => setAmount(e.target.value)} className="p-3 rounded-xl border border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-200" />
@@ -846,7 +855,7 @@ const ExpenseTracker = ({
 
         <div className="flex gap-4 pt-4">
           <label className="flex items-center gap-2 text-sm text-red-600">
-            <input type="checkbox" className="rounded text-red-500" /> Recurring
+            <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} className="rounded text-red-500" /> Recurring
           </label>
           <button type="button" onClick={() => setShowRecurring(!showRecurring)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${showRecurring ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700'}`}>
@@ -858,7 +867,7 @@ const ExpenseTracker = ({
         </div>
       </form>
       {editingExpense && (
-        <button onClick={() => { setEditingExpense(null); setDesc(""); setAmount(""); setCategory(CATEGORIES[0]); setSelectedTags([]); }} className="text-sm text-red-500 underline mt-2">
+        <button onClick={handleCancelEdit} className="text-sm text-red-500 underline mt-2">
           Cancel Edit
         </button>
       )}
