@@ -262,7 +262,42 @@ export const WalletProvider = ({ children }) => {
   ];
 
   // ──────────────────────────────────────────────────────────────
-  // RETURN
+  // NEW: EXPENSE LOGIC (ADDED BELOW — NO CHANGES ABOVE)
+  // ──────────────────────────────────────────────────────────────
+
+  // Debit Office Fund when expense is logged
+  const debitOfficeForExpense = (expenseData, user = "Expense Logger") => {
+    if (!expenseData || !expenseData.amount || expenseData.amount <= 0) {
+      throw new Error("Invalid expense amount");
+    }
+    const amount = Number(expenseData.amount);
+    deductFromWallet(WALLET_KEYS.OFFICE, amount, user, {
+      expenseId: expenseData.id,
+      description: expenseData.description,
+      category: expenseData.category,
+      action: "expense_debit",
+    });
+    toast.success(`₹${amount.toFixed(2)} debited from Office Fund`);
+  };
+
+  // Refund to Office Fund when expense is deleted
+  const refundExpenseToOffice = (expenseData, user = "Expense Deleted") => {
+    if (!expenseData || !expenseData.amount || expenseData.amount <= 0) {
+      toast.error("Invalid expense for refund");
+      return;
+    }
+    const amount = Number(expenseData.amount);
+    addToWallet(WALLET_KEYS.OFFICE, amount, user, {
+      expenseId: expenseData.id,
+      description: `Refund: ${expenseData.description}`,
+      category: expenseData.category,
+      action: "expense_refund_on_delete",
+    });
+    toast.success(`₹${amount.toFixed(2)} refunded to Office Fund`);
+  };
+
+  // ──────────────────────────────────────────────────────────────
+  // RETURN (added new functions to context)
   // ──────────────────────────────────────────────────────────────
   return (
     <WalletContext.Provider
@@ -279,6 +314,10 @@ export const WalletProvider = ({ children }) => {
         formatWallet,
         PLATFORM,
         WALLET_KEYS,
+
+        // NEW: Expense functions
+        debitOfficeForExpense,
+        refundExpenseToOffice,
       }}
     >
       {children}
