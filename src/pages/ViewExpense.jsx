@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { useExpense } from "../context/ExpenseContext";
-import { useWallet } from "../context/WalletContext"; // ADD THIS
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Tag, Calendar, DollarSign, Clock, Receipt, CheckCircle,
@@ -11,7 +10,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, isValid } from "date-fns";
-import { toast } from "react-hot-toast"; // ADD THIS
+import { toast } from "react-hot-toast"; // toast for user feedback
 
 const PAYMENT_METHODS = [
   { value: "cash", label: "Cash", icon: "Money" },
@@ -24,7 +23,6 @@ const TAGS = ["Urgent", "Recurring", "Tax-deductible", "One-time"];
 const View = () => {
   const { id } = useParams();
   const { expenses, removeExpense } = useExpense();
-  const { refundExpenseToOffice } = useWallet(); // ADD THIS
   const navigate = useNavigate();
 
   const [expense, setExpense] = useState(null);
@@ -44,22 +42,15 @@ const View = () => {
   const handleBack = () => navigate('/log-expense');
   const handleEdit = () => navigate(`/edit-expense/${id}`);
   
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!expense) return;
-
-    // 1. Remove from ExpenseContext
-    removeExpense(expense.id);
-
-    // 2. REFUND TO OFFICE FUND
     try {
-      refundExpenseToOffice(expense);
+      await removeExpense(expense.id);
       toast.success(`₹${expense.amount.toLocaleString()} refunded to Office Fund`);
+      navigate('/log-expense');
     } catch (err) {
-      toast.error("Failed to refund. Try again.");
+      toast.error(err?.message || "Failed to delete expense");
     }
-
-    // 3. Navigate back
-    navigate('/log-expense');
   };
 
   const handleShare = () => {

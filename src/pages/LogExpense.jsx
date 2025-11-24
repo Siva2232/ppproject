@@ -122,19 +122,8 @@ const LogExpense = () => {
         createdAt: new Date().toISOString(),
       };
 
-      // 1. Add to ExpenseContext
-      addExpense(expenseData);
-
-      // 2. DEBIT FROM OFFICE FUND
-      try {
-        debitOfficeForExpense(expenseData, "Expense Logger");
-      } catch (err) {
-        console.error("Insufficient office fund:", err);
-        alert(err.message || "Not enough balance in Office Fund!");
-        setSubmitStatus('error');
-        setIsSubmitting(false);
-        return;
-      }
+      // 1. Add via Supabase RPC (atomic debit handled in backend)
+      await addExpense(expenseData);
 
       setSubmitStatus('success');
 
