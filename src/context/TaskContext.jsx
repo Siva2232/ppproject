@@ -9,25 +9,9 @@ import {
 } from "react";
 import { useAuth } from "./AuthContext";
 import { useNotifications } from "./NotificationContext";
-
-const TASK_KEY = "crm-compass-tasks-v3";
-const HISTORY_KEY = "crm-compass-history-v1";
+import supabase from "../utils/supabase";
 
 const TaskContext = createContext(undefined);
-
-const safeGet = (key, fallback) => {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-};
-const safeSet = (key, value) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
-};
 
 export const TaskProvider = ({ children }) => {
   const [tasks, setTasks] = useState([]);
@@ -35,131 +19,258 @@ export const TaskProvider = ({ children }) => {
   const { user } = useAuth();
   const { addNotification } = useNotifications();
 
-  const isFirstMount = useRef(true);
   const completingRef = useRef(new Set());
 
-  useEffect(() => {
-    setTasks(safeGet(TASK_KEY, []));
-    setHistory(safeGet(HISTORY_KEY, []));
-    isFirstMount.current = false;
-  }, []);
-
-  useEffect(() => {
-    if (isFirstMount.current) return;
-    safeSet(TASK_KEY, tasks);
-  }, [tasks]);
-
-  useEffect(() => {
-    if (isFirstMount.current) return;
-    safeSet(HISTORY_KEY, history.slice(0, 100));
-  }, [history]);
-
-  useEffect(() => {
-    if (!user) return;
-    setTasks(prev =>
-      prev.map(t => {
-        if (t.createdBy) return t;
-        return {
-          ...t,
-          createdBy: user.id || "unknown",
-          createdByName: user.name || "Admin",
-          createdByAvatar: user.avatar || "AU",
-          createdByColor: user.color || "from-cyan-400 to-blue-600",
-        };
-      })
+  const loadTasks = useCallback(async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("[Task] loadTasks error", error);
+      return;
+    }
+    setTasks(
+      (data || []).map((row) => ({
+        id: row.id,
+        title: row.title,
+        dueDate: row.due_date || "",
+        priority: row.priority || "medium",
+        assigneeId: row.assignee_id || "",
+        assigneeName: row.assignee_name || "",
+        assigneeAvatar: row.assignee_avatar || "",
+        assigneeColor: row.assignee_color || "",
+        createdBy: row.created_by || user.id,
+        createdByName: row.created_by_name || user.name || "Admin",
+        createdByAvatar: row.created_by_avatar || user.avatar || "AU",
+        createdByColor: row.created_by_color || user.color || "from-cyan-400 to-blue-600",
+        completed: !!row.completed,
+        createdAt: row.created_at,
+      }))
     );
   }, [user]);
 
-  const log = useCallback((action, task, details = "") => {
-    const entry = {
-      id: Date.now(),
-      action,
-      taskId: task.id,
-      taskTitle: task.title,
-      timestamp: new Date().toISOString(),
-      details,
-    };
-    setHistory(prev => [entry, ...prev].slice(0, 100));
-  }, []);
+  const loadHistory = useCallback(async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase
+      .from("task_history")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("timestamp", { ascending: false })
+      .limit(100);
+    if (error) {
+      console.error("[Task] loadHistory error", error);
+      return;
+    }
+    setHistory(
+      (data || []).map((row) => ({
+        id: row.id,
+        action: row.action,
+        taskId: row.task_id,
+        taskTitle: row.task_title,
+        timestamp: row.timestamp,
+        details: row.details || "",
+      }))
+    );
+  }, [user]);
 
-  const addTask = useCallback((newTask) => {
-    setTasks(prev => [newTask, ...prev]);
-    log("created", newTask);
-    addNotification(`Task created: "${newTask.title}"`, "success");
-  }, [log, addNotification]);
+  useEffect(() => {
+    loadTasks();
+    loadHistory();
+  }, [loadTasks, loadHistory]);
 
-  const toggleTask = useCallback((id) => {
-    if (completingRef.current.has(id)) return;
-    completingRef.current.add(id);
+  const logRemote = useCallback(
+    async (action, task, details = "") => {
+      if (!user?.id) return;
+      const entry = {
+        id: crypto.randomUUID(),
+        user_id: user.id,
+        task_id: task.id,
+        task_title: task.title,
+        action,
+        details,
+      };
+      const { error } = await supabase.from("task_history").insert(entry);
+      if (error) console.error("[Task] history insert error", error);
+      setHistory((prev) => [
+        {
+          id: entry.id,
+          action,
+          taskId: task.id,
+          taskTitle: task.title,
+          timestamp: new Date().toISOString(),
+          details,
+        },
+        ...prev,
+      ].slice(0, 100));
+    },
+    [user]
+  );
 
-    setTasks(prev => {
-      const task = prev.find(t => t.id === id);
+  const addTask = useCallback(
+    async (newTask) => {
+      if (!user?.id) return;
+      const id = newTask.id || crypto.randomUUID();
+      const row = {
+        id: id,
+        user_id: user.id,
+        title: newTask.title,
+        due_date: newTask.dueDate || null,
+        priority: newTask.priority || "medium",
+        assignee_id: newTask.assigneeId || null,
+        assignee_name: newTask.assigneeName || null,
+        assignee_avatar: newTask.assigneeAvatar || null,
+        assignee_color: newTask.assigneeColor || null,
+        created_by: newTask.createdBy || user.id,
+        created_by_name: newTask.createdByName || user.name || "Admin",
+        created_by_avatar: newTask.createdByAvatar || user.avatar || "AU",
+        created_by_color: newTask.createdByColor || user.color || "from-cyan-400 to-blue-600",
+        completed: !!newTask.completed,
+      };
+      const { error } = await supabase.from("tasks").insert(row);
+      if (error) {
+        console.error("[Task] addTask error", error);
+        addNotification("Failed to create task", "error");
+        return;
+      }
+      setTasks((prev) => [
+        {
+          id: id,
+          title: row.title,
+          dueDate: row.due_date || "",
+          priority: row.priority,
+          assigneeId: row.assignee_id || "",
+          assigneeName: row.assignee_name || "",
+          assigneeAvatar: row.assignee_avatar || "",
+          assigneeColor: row.assignee_color || "",
+          createdBy: row.created_by,
+          createdByName: row.created_by_name,
+          createdByAvatar: row.created_by_avatar,
+          createdByColor: row.created_by_color,
+          completed: !!row.completed,
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+      await logRemote("created", { id, title: row.title });
+      addNotification(`Task created: "${row.title}"`, "success");
+    },
+    [user, addNotification, logRemote]
+  );
+
+  const toggleTask = useCallback(
+    async (id) => {
+      if (completingRef.current.has(id)) return;
+      completingRef.current.add(id);
+
+      const task = tasks.find((t) => t.id === id);
       if (!task) {
         completingRef.current.delete(id);
-        return prev;
+        return;
       }
-
-      const updated = { ...task, completed: !task.completed };
-      const wasCompleted = task.completed;
-
-      log(wasCompleted ? "reopened" : "completed", updated);
-
-      if (!wasCompleted) {
-        addNotification(`Task completed: "${task.title}"`, "success");
+      const nextCompleted = !task.completed;
+      const { error } = await supabase
+        .from("tasks")
+        .update({ completed: nextCompleted })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) {
+        console.error("[Task] toggleTask error", error);
+        completingRef.current.delete(id);
+        return;
       }
-
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: nextCompleted } : t)));
+      const action = nextCompleted ? "completed" : "reopened";
+      await logRemote(action, { id, title: task.title });
+      if (nextCompleted) addNotification(`Task completed: "${task.title}"`, "success");
       setTimeout(() => completingRef.current.delete(id), 100);
-      return prev.map(t => (t.id === id ? updated : t));
-    });
-  }, [log, addNotification]);
+    },
+    [tasks, user, addNotification, logRemote]
+  );
 
-  const updateTask = useCallback((id, updates) => {
-    setTasks(prev => {
-      const old = prev.find(t => t.id === id);
-      if (!old) return prev;
-      const changed = Object.keys(updates).filter(k => old[k] !== updates[k]);
-      if (!changed.length) return prev;
+  const updateTask = useCallback(
+    async (id, updates) => {
+      const old = tasks.find((t) => t.id === id);
+      if (!old) return;
+      const changed = Object.keys(updates).filter((k) => old[k] !== updates[k]);
+      if (!changed.length) return;
 
-      const updated = { ...old, ...updates };
-      log("updated", updated, changed.join(", "));
-      addNotification(`Task updated: "${updated.title}"`, "info");
-      return prev.map(t => (t.id === id ? updated : t));
-    });
-  }, [log, addNotification]);
-
-  // DELETE + NOTIFICATION (LIKE YOU SAID — NO DUPLICATES)
-  const deleteTask = useCallback((id) => {
-    setTasks(prev => {
-      const task = prev.find(t => t.id === id);
-      if (task) {
-        log("deleted", task);
-        addNotification(`Task deleted: "${task.title}"`, "info");
+      const payload = {
+        title: updates.title ?? old.title,
+        // Ensure empty strings become null; avoid mixing ?? and || without parentheses
+        due_date: (updates.dueDate ?? old.dueDate) || null,
+        priority: updates.priority ?? old.priority,
+        assignee_id: (updates.assigneeId ?? old.assigneeId) || null,
+        assignee_name: (updates.assigneeName ?? old.assigneeName) || null,
+        assignee_avatar: (updates.assigneeAvatar ?? old.assigneeAvatar) || null,
+        assignee_color: (updates.assigneeColor ?? old.assigneeColor) || null,
+      };
+      const { error } = await supabase
+        .from("tasks")
+        .update(payload)
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) {
+        console.error("[Task] updateTask error", error);
+        addNotification("Failed to update task", "error");
+        return;
       }
-      return prev.filter(t => t.id !== id);
-    });
-  }, [log, addNotification]);
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+      await logRemote("updated", { id, title: payload.title }, changed.join(", "));
+      addNotification(`Task updated: "${payload.title}"`, "info");
+    },
+    [tasks, user, addNotification, logRemote]
+  );
 
-  const clearCompleted = useCallback(() => {
-    setTasks(prev => {
-      const completed = prev.filter(t => t.completed);
-      if (completed.length > 0) {
-        completed.forEach(t => log("cleared", t));
-        addNotification(`Cleared ${completed.length} completed task(s)`, "info");
+  const deleteTask = useCallback(
+    async (id) => {
+      const task = tasks.find((t) => t.id === id);
+      const { error } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) {
+        console.error("[Task] deleteTask error", error);
+        addNotification("Failed to delete task", "error");
+        return;
       }
-      return prev.filter(t => !t.completed);
-    });
-  }, [log, addNotification]);
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      if (task) await logRemote("deleted", { id, title: task.title });
+      addNotification(task ? `Task deleted: "${task.title}"` : "Task deleted", "info");
+    },
+    [tasks, user, addNotification, logRemote]
+  );
+
+  const clearCompleted = useCallback(
+    async () => {
+      const completed = tasks.filter((t) => t.completed);
+      if (!completed.length) return;
+      const { error } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("completed", true);
+      if (error) {
+        console.error("[Task] clearCompleted error", error);
+        addNotification("Failed to clear completed tasks", "error");
+        return;
+      }
+      setTasks((prev) => prev.filter((t) => !t.completed));
+      for (const t of completed) {
+        await logRemote("cleared", { id: t.id, title: t.title });
+      }
+      addNotification(`Cleared ${completed.length} completed task(s)`, "info");
+    },
+    [tasks, user, addNotification, logRemote]
+  );
 
   return (
-    <TaskContext.Provider value={{
-      tasks,
-      history,
-      addTask,
-      toggleTask,
-      updateTask,
-      deleteTask,
-      clearCompleted,
-    }}>
+    <TaskContext.Provider
+      value={{ tasks, history, addTask, toggleTask, updateTask, deleteTask, clearCompleted }}
+    >
       {children}
     </TaskContext.Provider>
   );
