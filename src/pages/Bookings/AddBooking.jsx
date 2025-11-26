@@ -13,10 +13,10 @@ import { format } from "date-fns";
 
 const categories = [
   { value: CATEGORY.FLIGHT, label: "Flight", icon: Plane, color: "bg-blue-100 text-blue-700" },
-  { value: CATEGORY.BUS,    label: "Bus",    icon: Bus,     color: "bg-emerald-100 text-emerald-700" },
-  { value: CATEGORY.TRAIN,  label: "Train",  icon: Train,   color: "bg-purple-100 text-purple-700" },
-  { value: CATEGORY.CAB,    label: "Cab",    icon: Car,     color: "bg-orange-100 text-orange-700" },
-  { value: CATEGORY.HOTEL,  label: "Hotel",  icon: Hotel,   color: "bg-pink-100 text-pink-700" },
+  { value: CATEGORY.BUS, label: "Bus", icon: Bus, color: "bg-emerald-100 text-emerald-700" },
+  { value: CATEGORY.TRAIN, label: "Train", icon: Train, color: "bg-purple-100 text-purple-700" },
+  { value: CATEGORY.CAB, label: "Cab", icon: Car, color: "bg-orange-100 text-orange-700" },
+  { value: CATEGORY.HOTEL, label: "Hotel", icon: Hotel, color: "bg-pink-100 text-pink-700" },
 ];
 
 const platforms = [
@@ -41,7 +41,7 @@ const countryCodes = [
 
 export default function AddBooking() {
   const { addBooking } = useBooking();
-  const { applyBookingWallet, getWallet } = useWallet();
+  const { getWallet } = useWallet();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
