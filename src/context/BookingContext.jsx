@@ -164,20 +164,20 @@ export const BookingProvider = ({ children }) => {
       const mapped = fresh
         ? fromRow(fresh)
         : fromRow({
-            id,
-            customer_name: payload.p_customer_name,
-            email: payload.p_email,
-            contact_number: payload.p_contact_number,
-            booking_date: payload.p_booking_date,
-            category: payload.p_category,
-            platform: payload.p_platform,
-            status: payload.p_status,
-            base_pay: payload.p_base_pay,
-            commission_amount: payload.p_commission_amount,
-            markup_amount: payload.p_markup_amount,
-            total_revenue: payload.p_total_revenue,
-            user_id: payload.p_user_id,
-          });
+          id,
+          customer_name: payload.p_customer_name,
+          email: payload.p_email,
+          contact_number: payload.p_contact_number,
+          booking_date: payload.p_booking_date,
+          category: payload.p_category,
+          platform: payload.p_platform,
+          status: payload.p_status,
+          base_pay: payload.p_base_pay,
+          commission_amount: payload.p_commission_amount,
+          markup_amount: payload.p_markup_amount,
+          total_revenue: payload.p_total_revenue,
+          user_id: payload.p_user_id,
+        });
       setBookings((prev) => [mapped, ...prev]);
       toast.success("Booking added successfully!");
       // Refresh wallet balances and activity after atomic RPC completes
@@ -201,51 +201,95 @@ export const BookingProvider = ({ children }) => {
     const booking = bookings.find(b => b.id === id);
     if (!booking) throw new Error("Booking not found");
 
-    const { error } = await supabase.from("bookings").delete().eq("id", id);
-    if (error) {
-      throw new Error(error.message || "Failed to delete booking");
+    try {
+      // 1. Reverse financial transactions if confirmed
+      if (booking.status === STATUS.CONFIRMED) {
+        const { error: revError } = await supabase.rpc("reverse_booking_transaction", {
+          p_booking_id: id,
+          p_user_id: user.id,
+        });
+        if (revError) throw revError;
+      }
+
+      // 2. Delete the booking
+      const { error } = await supabase.from("bookings").delete().eq("id", id);
+      if (error) throw new Error(error.message || "Failed to delete booking");
+
+      setBookings((prev) => prev.filter((b) => b.id !== id));
+      toast.success(`Booking #${id} removed`);
+
+      // Refresh wallets
+      await refreshWallets?.();
+      await refreshTransactions?.();
+    } catch (err) {
+      console.error("Remove booking failed:", err);
+      throw new Error(err.message || "Failed to remove booking");
     }
-    setBookings((prev) => prev.filter((b) => b.id !== id));
-    toast.success(`Booking #${id} removed`);
   };
 
   // === UPDATE STATUS ONLY ===
   const updateBookingStatus = async (id, newStatus) => {
     if (!Object.values(STATUS).includes(newStatus))
       throw new Error("Invalid status");
-    const { error } = await supabase
-      .from("bookings")
-      .update({ status: newStatus })
-      .eq("id", id);
-    if (error) throw new Error(error.message || "Failed to update status");
-
-    // Refresh single row from view
-    const { data: updated } = await supabase
-      .from("bookings_with_profit")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    setBookings((prev) =>
-      prev.map((b) => (b.id === id ? fromRow(updated || { ...b, status: newStatus }) : b))
-    );
 
     const booking = bookings.find(b => b.id === id);
-    const name = booking?.customerName?.split(" ")[0] || "Booking";
+    if (!booking) throw new Error("Booking not found");
+    const oldStatus = booking.status;
 
-    const msg = newStatus === STATUS.CONFIRMED
-      ? `${name}'s booking confirmed`
-      : newStatus === STATUS.CANCELLED
-      ? `${name}'s booking cancelled`
-      : `${name}'s booking pending`;
+    if (oldStatus === newStatus) return;
 
-    toast.success(msg);
-    // Ensure wallet view reflects any DB-side movements
     try {
+      // Handle Financial Logic Changes
+      if (oldStatus === STATUS.CONFIRMED && newStatus !== STATUS.CONFIRMED) {
+        // Confirmed -> Pending/Cancelled: REVERSE
+        const { error } = await supabase.rpc("reverse_booking_transaction", {
+          p_booking_id: id,
+          p_user_id: user.id,
+        });
+        if (error) throw error;
+      } else if (oldStatus !== STATUS.CONFIRMED && newStatus === STATUS.CONFIRMED) {
+        // Pending/Cancelled -> Confirmed: APPLY
+        const { error } = await supabase.rpc("confirm_booking_transaction", {
+          p_booking_id: id,
+          p_user_id: user.id,
+        });
+        if (error) throw error;
+      }
+
+      // Update Status in DB
+      const { error } = await supabase
+        .from("bookings")
+        .update({ status: newStatus })
+        .eq("id", id);
+      if (error) throw new Error(error.message || "Failed to update status");
+
+      // Refresh single row from view
+      const { data: updated } = await supabase
+        .from("bookings_with_profit")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      setBookings((prev) =>
+        prev.map((b) => (b.id === id ? fromRow(updated || { ...b, status: newStatus }) : b))
+      );
+
+      const name = booking?.customerName?.split(" ")[0] || "Booking";
+      const msg = newStatus === STATUS.CONFIRMED
+        ? `${name}'s booking confirmed`
+        : newStatus === STATUS.CANCELLED
+          ? `${name}'s booking cancelled`
+          : `${name}'s booking pending`;
+
+      toast.success(msg);
+
+      // Ensure wallet view reflects any DB-side movements
       await refreshWallets?.();
       await refreshTransactions?.();
-    } catch (e) {
-      console.warn("Wallet refresh after status update failed:", e?.message || e);
+
+    } catch (err) {
+      console.error("Update status failed:", err);
+      toast.error(err.message || "Failed to update status");
     }
   };
 
@@ -260,6 +304,20 @@ export const BookingProvider = ({ children }) => {
       status,
       category,
     } = updatedBooking;
+
+    const oldBooking = bookings.find(b => b.id === id);
+    if (!oldBooking) throw new Error("Original booking not found");
+
+    // 1. If it WAS confirmed, reverse the OLD financials
+    if (oldBooking.status === STATUS.CONFIRMED) {
+      const { error: revError } = await supabase.rpc("reverse_booking_transaction", {
+        p_booking_id: id,
+        p_user_id: user.id,
+      });
+      if (revError) throw revError;
+    }
+
+    // 2. Update the row in DB
     const payload = toRow({
       ...updatedBooking,
       basePay,
@@ -274,6 +332,16 @@ export const BookingProvider = ({ children }) => {
       .update(payload)
       .eq("id", id);
     if (error) throw new Error(error.message || "Failed to update booking");
+
+    // 3. If it IS NOW confirmed, apply the NEW financials
+    // (We use confirm_booking_transaction which reads the *updated* row from DB)
+    if (status === STATUS.CONFIRMED) {
+      const { error: confError } = await supabase.rpc("confirm_booking_transaction", {
+        p_booking_id: id,
+        p_user_id: user.id,
+      });
+      if (confError) throw confError;
+    }
 
     const { data: fresh } = await supabase
       .from("bookings_with_profit")
