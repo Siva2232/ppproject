@@ -127,8 +127,9 @@ export const ExpenseProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    refreshExpenses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (user?.id) {
+      refreshExpenses();
+    }
   }, [user?.id]);
 
   // ── ADD EXPENSE (supports object or legacy params) ──
@@ -195,19 +196,19 @@ export const ExpenseProvider = ({ children }) => {
       const mapped = fresh
         ? fromRow(fresh)
         : fromRow({
-            id,
-            description: payload.p_description,
-            amount: payload.p_amount,
-            category: payload.p_category,
-            date: payload.p_date,
-            created_at: new Date().toISOString(),
-            payment_method: payload.p_payment_method,
-            vendor: payload.p_vendor,
-            location: payload.p_location,
-            notes: payload.p_notes,
-            is_recurring: payload.p_is_recurring,
-            tags: payload.p_tags,
-          });
+          id,
+          description: payload.p_description,
+          amount: payload.p_amount,
+          category: payload.p_category,
+          date: payload.p_date,
+          created_at: new Date().toISOString(),
+          payment_method: payload.p_payment_method,
+          vendor: payload.p_vendor,
+          location: payload.p_location,
+          notes: payload.p_notes,
+          is_recurring: payload.p_is_recurring,
+          tags: payload.p_tags,
+        });
       if (fetchErr) {
         console.warn("Fetch inserted expense failed:", fetchErr);
       }
