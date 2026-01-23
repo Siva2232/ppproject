@@ -34,7 +34,7 @@ function App() {
       <AppRoutes />
 
       {/* Supabase Todos preview */}
-      <div className="p-4">
+      {/* <div className="p-4">
         <h2 className="text-lg font-semibold mb-2">Todos</h2>
         {loading && <p>Loading...</p>}
         {error && <p className="text-red-600">{error}</p>}
@@ -48,7 +48,7 @@ function App() {
             ))}
           </ul>
         )}
-      </div>
+      </div> */}
     </div>
   );
 }

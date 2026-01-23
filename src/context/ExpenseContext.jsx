@@ -113,7 +113,7 @@ export const ExpenseProvider = ({ children }) => {
       const { data, error } = await supabase
         .from("expenses")
         .select("*")
-        .order("expense_date", { ascending: false });
+        .order("date", { ascending: false });
       if (error) throw error;
       const mapped = (data || []).map(fromRow);
       setExpenses(mapped);

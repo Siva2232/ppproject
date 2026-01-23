@@ -12,7 +12,7 @@ import { useTaskContext } from "../context/TaskContext";
 import { useAuth } from "../context/AuthContext";
 
 const TEAM = [
-  { id: "u1", name: "AntonyJoseph", avatar: "A", color: "from-rose-400 to-pink-500" },
+  { id: "u1", name: "Staff", avatar: "S", color: "from-rose-400 to-pink-500" },
   { id: "u2", name: "HariKrishnan", avatar: "H", color: "from-emerald-400 to-teal-500" },
   { id: "u3", name: "AkshayKumar", avatar: "A", color: "from-indigo-400 to-purple-500" },
 ];

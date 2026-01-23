@@ -4,10 +4,46 @@ import { Bell, CheckCircle, Clock, XCircle, AlertCircle, Info } from "lucide-rea
 import { useNotifications } from "../context/NotificationContext";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
+import { useEffect, useRef } from "react";
 
 const Notification = () => {
   const { notifications, markAsRead, clearAll, unreadCount } = useNotifications();
   const navigate = useNavigate();
+
+  // Play a subtle chime sound when a new unread notification arrives
+  const playNotificationSound = () => {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === "suspended") {
+      ctx.resume();
+    }
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = 0.2; // Adjust volume as needed (0.1–0.3 is subtle)
+    gainNode.connect(ctx.destination);
+
+    const playNote = (freq, delay, duration) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      osc.connect(gainNode);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + duration);
+    };
+
+    // Quick ascending chime (feels like a gentle notification)
+    playNote(600, 0, 0.1);
+    playNote(800, 0.1, 0.15);
+  };
+
+  // Track previous unread count to detect increases (new notifications)
+  const prevUnreadCount = useRef(null);
+
+  useEffect(() => {
+    if (prevUnreadCount.current !== null && unreadCount > prevUnreadCount.current) {
+      playNotificationSound();
+    }
+    prevUnreadCount.current = unreadCount;
+  }, [unreadCount]);
 
   const format = (ts) => {
     const now = new Date();

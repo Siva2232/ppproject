@@ -7,20 +7,9 @@ import { useBooking } from "../context/BookingContext";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { 
-  ArrowLeft, 
-  Phone, 
-  Mail, 
-  Calendar, 
-  Globe, 
-  DollarSign, 
-  TrendingUp,
-  Package,
-  Copy,
-  Plane,
-  Bus,
-  Train,
-  Car,
-  Hotel
+  ArrowLeft, Phone, Mail, Calendar, Globe, DollarSign, 
+  TrendingUp, Package, Copy, Plane, Bus, Train, 
+  Car, Hotel, ExternalLink, ShieldCheck, Hash, User
 } from "lucide-react";
 
 const categoryIcons = {
@@ -32,17 +21,11 @@ const categoryIcons = {
 };
 
 const categoryColors = {
-  flight: "bg-blue-100 text-blue-700",
-  bus: "bg-emerald-100 text-emerald-700",
-  train: "bg-purple-100 text-purple-700",
-  cab: "bg-orange-100 text-orange-700",
-  hotel: "bg-pink-100 text-pink-700",
-};
-
-const platformLabels = {
-  alhind: "AlHind",
-  akbar: "Akbar",
-  direct: "Direct",
+  flight: "bg-blue-500/10 text-blue-600",
+  bus: "bg-emerald-500/10 text-emerald-600",
+  train: "bg-violet-500/10 text-violet-600",
+  cab: "bg-amber-500/10 text-amber-600",
+  hotel: "bg-rose-500/10 text-rose-600",
 };
 
 export default function ViewBooking() {
@@ -59,17 +42,16 @@ export default function ViewBooking() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Safe number conversion
-  const safeNumber = (value) => {
-    const num = Number(value);
-    return isNaN(num) ? 0 : num;
-  };
+  const safeNumber = (v) => (isNaN(Number(v)) ? 0 : Number(v));
 
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-indigo-600" />
+        <div className="flex items-center justify-center min-h-[80vh]">
+          <div className="relative w-16 h-16">
+            <div className="absolute inset-0 rounded-full border-4 border-indigo-100" />
+            <div className="absolute inset-0 rounded-full border-4 border-t-indigo-600 animate-spin" />
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -78,15 +60,14 @@ export default function ViewBooking() {
   if (!booking) {
     return (
       <DashboardLayout>
-        <div className="p-8 text-center">
-          <Package size={64} className="mx-auto text-gray-300 mb-4" />
-          <h2 className="text-2xl font-bold text-gray-700">Booking Not Found</h2>
-          <p className="text-gray-500 mt-2">The booking with ID #{id} does not exist.</p>
-          <button
-            onClick={() => navigate("/bookings")}
-            className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition"
-          >
-            Back to Bookings
+        <div className="p-12 text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Package size={40} className="text-slate-300" />
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Record Lost</h2>
+          <p className="text-slate-500 mt-2 font-medium">Booking ID #{id?.slice(0, 8)} could not be located in our archives.</p>
+          <button onClick={() => navigate("/bookings")} className="mt-8 px-8 py-3 bg-slate-900 text-white font-black rounded-2xl uppercase tracking-widest text-xs">
+            Back to Database
           </button>
         </div>
       </DashboardLayout>
@@ -94,167 +75,171 @@ export default function ViewBooking() {
   }
 
   const Icon = categoryIcons[booking.category] || Package;
-
-  // Extract correct fields
-  const baseAmount = safeNumber(booking.basePay);
-  const commissionAmount = safeNumber(booking.commissionAmount);
-  const markupAmount = safeNumber(booking.markupAmount);
-  const totalRevenue = baseAmount + commissionAmount + markupAmount;
+  const totalRevenue = safeNumber(booking.basePay) + safeNumber(booking.commissionAmount) + safeNumber(booking.markupAmount);
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
-        <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
-
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center justify-between mb-8"
-          >
-            <button
+      <div className="min-h-screen bg-[#F8FAFC] pb-20">
+        <div className="max-w-4xl mx-auto p-4 sm:p-8">
+          
+          {/* Top Navigation */}
+          <div className="flex items-center justify-between mb-8">
+            <button 
               onClick={() => navigate(-1)}
-              className="flex items-center gap-2 text-gray-700 hover:text-indigo-600 font-medium transition"
+              className="p-3 rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-indigo-600 transition-all shadow-sm"
             >
-              <ArrowLeft size={22} />
-              <span className="hidden sm:inline">Back</span>
+              <ArrowLeft size={20} />
             </button>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-              Booking Details
-            </h1>
-            <div className="w-20" />
-          </motion.div>
-
-          {/* Main Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/50 overflow-hidden"
-          >
-            {/* Header Gradient */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm opacity-90">Booking ID</p>
-                  <p className="text-2xl font-bold font-mono">#{booking.id}</p>
-                </div>
-                <div className={`p-3 rounded-full ${categoryColors[booking.category]} shadow-lg`}>
-                  <Icon size={32} />
-                </div>
-              </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Operational Detail</p>
+              <h1 className="text-xl font-black text-slate-900 uppercase">Booking Archive</h1>
             </div>
+          </div>
 
-            <div className="p-6 sm:p-8 space-y-8">
-
-              {/* Customer Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-500 font-medium">Customer Name</p>
-                    <p className="text-xl font-bold text-gray-900">{booking.customerName || "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 font-medium">Email</p>
-                    <p className="text-lg flex items-center gap-2">
-                      <Mail size={18} className="text-indigo-600" />
-                      {booking.email || "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 font-medium">Contact Number</p>
-                    <p className="text-lg font-medium flex items-center gap-2">
-                      <Phone size={18} className="text-emerald-600" />
-                      {booking.contactNumber || "—"}
-                      {booking.contactNumber && (
-                        <button
-                          onClick={() => copyToClipboard(booking.contactNumber)}
-                          className="p-1.5 rounded-full hover:bg-indigo-100 transition"
-                          title="Copy number"
-                        >
-                          <Copy size={16} className={copied ? "text-emerald-600" : "text-gray-500"} />
-                        </button>
-                      )}
-                      {copied && <span className="text-xs text-emerald-600 ml-1">Copied!</span>}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-500 font-medium">Travel Type</p>
-                    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${categoryColors[booking.category] || "bg-gray-100 text-gray-700"}`}>
-                      <Icon size={18} />
-                      {booking.category ? booking.category.charAt(0).toUpperCase() + booking.category.slice(1) : "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 font-medium">Platform</p>
-                    <p className="text-lg font-medium flex items-center gap-2">
-                      <Globe size={18} className="text-purple-600" />
-                      {platformLabels[booking.platform] || booking.platform || "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 font-medium">Travel/Check-in Date</p>
-                    <p className="text-lg font-medium flex items-center gap-2">
-                      <Calendar size={18} className="text-orange-600" />
-                      {booking.date ? format(new Date(booking.date), "dd MMMM yyyy") : "—"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Revenue Breakdown */}
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-2xl border-2 border-indigo-200">
-                <h3 className="text-xl font-bold text-indigo-800 mb-4 flex items-center gap-2">
-                  <DollarSign size={24} /> Revenue Breakdown
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between text-lg">
-                    <span className="text-gray-700">Base Amount</span>
-                    <span className="font-bold text-indigo-700">₹{baseAmount.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-lg">
-                    <span className="text-gray-700">Commission</span>
-                    <span className="font-bold text-emerald-700">₹{commissionAmount.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-lg">
-                    <span className="text-gray-700 flex items-center gap-1">
-                      Markup <TrendingUp size={16} className="text-purple-600" />
-                    </span>
-                    <span className="font-bold text-purple-700">₹{markupAmount.toLocaleString()}</span>
-                  </div>
-                  <div className="border-t-2 border-indigo-300 pt-3 mt-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-2xl font-bold text-indigo-900">Total Revenue</span>
-                      <span className="text-3xl font-bold text-indigo-800">
-                        ₹{totalRevenue.toLocaleString()}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* LEFT COLUMN: Customer & Booking Info */}
+            <div className="lg:col-span-2 space-y-6">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden"
+              >
+                {/* Visual Header */}
+                <div className="p-8 border-b border-slate-50 flex items-start justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-2 rounded-lg ${categoryColors[booking.category]}`}>
+                        <Icon size={18} />
+                      </div>
+                      <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                        {booking.category} Reservation
                       </span>
                     </div>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tighter">
+                      {booking.customerName}
+                    </h2>
+                    <div className="flex items-center gap-3 text-slate-500">
+                      <Hash size={14} className="text-indigo-500" />
+                      <span className="font-mono text-xs font-bold">{booking.id}</span>
+                    </div>
+                  </div>
+                  <StatusBadge status={booking.status} size="lg" />
+                </div>
+
+                {/* Details Grid */}
+                <div className="p-8 grid grid-cols-2 gap-y-8 gap-x-4">
+                  <DetailItem icon={<Mail className="text-indigo-500"/>} label="Email Address" value={booking.email} />
+                  <DetailItem 
+                    icon={<Phone className="text-emerald-500"/>} 
+                    label="Contact" 
+                    value={booking.contactNumber} 
+                    isCopyable 
+                    onCopy={() => copyToClipboard(booking.contactNumber)}
+                    copied={copied}
+                  />
+                  <DetailItem icon={<Calendar className="text-orange-500"/>} label="Service Date" value={booking.date ? format(new Date(booking.date), "PPP") : "—"} />
+                  <DetailItem icon={<Globe className="text-purple-500"/>} label="Platform" value={booking.platform?.toUpperCase() || "DIRECT"} />
+                </div>
+              </motion.div>
+
+              {/* Additional Log/Note Section */}
+              <div className="bg-indigo-600 rounded-[2rem] p-8 text-white flex items-center justify-between shadow-xl shadow-indigo-200">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
+                    <ShieldCheck size={24} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold opacity-80">Verified Transaction</p>
+                    <p className="text-[11px] uppercase tracking-widest font-black opacity-60">System Security: Level A</p>
+                  </div>
+                </div>
+                <ExternalLink size={20} className="opacity-40" />
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: Financials (The "Receipt") */}
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+              className="space-y-6"
+            >
+              <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden">
+                {/* Decorative circles to look like a punched receipt */}
+                <div className="absolute -bottom-3 left-0 right-0 flex justify-around px-4">
+                  {[...Array(8)].map((_, i) => (
+                    <div key={i} className="w-4 h-4 rounded-full bg-[#F8FAFC]" />
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2 mb-8 opacity-60">
+                  <DollarSign size={16} />
+                  <span className="text-[11px] font-black uppercase tracking-[0.2em]">Financial Summary</span>
+                </div>
+
+                <div className="space-y-6">
+                  <PriceRow label="Base Pay" amount={booking.basePay} />
+                  <PriceRow label="Commission" amount={booking.commissionAmount} accent="text-emerald-400" />
+                  <PriceRow label="Markup" amount={booking.markupAmount} accent="text-indigo-400" />
+                  
+                  <div className="pt-6 border-t border-slate-800 mt-6">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Total Receivable</p>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-lg font-bold text-slate-400">₹</span>
+                      <span className="text-4xl font-black tracking-tighter">{totalRevenue.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-12 bg-white/5 rounded-2xl p-4 border border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Payment cleared</p>
                   </div>
                 </div>
               </div>
 
-              {/* Status */}
-              <div className="flex justify-between items-center pt-4">
-                <div>
-                  <p className="text-sm text-gray-500 font-medium">Booking Status</p>
-                  <div className="mt-2">
-                    <StatusBadge status={booking.status || "unknown"} size="lg" />
-                  </div>
-                </div>
-                <button
-                  onClick={() => navigate(-1)}
-                  className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition transform hover:scale-105"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </motion.div>
+              <button 
+                onClick={() => navigate(-1)}
+                className="w-full py-5 rounded-[2rem] bg-white border border-slate-200 text-slate-900 font-black uppercase tracking-widest text-xs hover:bg-slate-50 transition-all shadow-sm"
+              >
+                Exit Record
+              </button>
+            </motion.div>
+
+          </div>
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+/* Helper Components for cleaner code */
+function DetailItem({ icon, label, value, isCopyable, onCopy, copied }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+        {icon}
+        {label}
+      </div>
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-bold text-slate-800">{value || "—"}</p>
+        {isCopyable && value && (
+          <button onClick={onCopy} className="p-1 hover:bg-slate-100 rounded-md transition-all">
+            <Copy size={12} className={copied ? "text-emerald-500" : "text-slate-300"} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PriceRow({ label, amount, accent = "text-white" }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-xs font-bold text-slate-400">{label}</span>
+      <span className={`text-sm font-black ${accent}`}>₹{Number(amount || 0).toLocaleString()}</span>
+    </div>
   );
 }
