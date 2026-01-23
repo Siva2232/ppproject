@@ -266,9 +266,9 @@ const Dashboard = () => {
                     <div className="p-3 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-xl shadow-inner">
                       <Activity className="w-8 h-8 text-white" strokeWidth={2.5} />
                     </div>
-                    <h1 className="text-4xl lg:text-6xl font-black tracking-tight text-white italic">
-                      {user?.name?.split(" ")[0] || "Chief"}
-                      <span className="font-light not-italic opacity-70">.dashboard</span>
+                    <h1 className="text-4xl lg:text-6xl font-black tracking-tight text-white">
+                      {user?.name?.split(" ")[0] || "Dashboard"}
+                      {/* <span className="font-light not-italic opacity-70">.dashboard</span> */}
                     </h1>
                   </div>
                   <p className="text-lg lg:text-xl text-white/60 font-medium pl-1">

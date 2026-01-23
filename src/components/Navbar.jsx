@@ -11,7 +11,7 @@ const formatCurrency = (amount) => {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-    maximumFractionDigits: 0, // Cleaner for top-bar scannability
+    maximumFractionDigits: 0,
   }).format(amount);
 };
 
@@ -19,7 +19,7 @@ const Navbar = () => {
   const { unreadCount } = useNotifications();
   const { walletData } = useWallet();
   const [open, setOpen] = useState(false);
-  const { logout, user } = useAuth(); // Keeping your auth logic
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -44,44 +44,18 @@ const Navbar = () => {
       <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-indigo-600 via-purple-500 to-pink-500 animate-gradient-x opacity-80" />
       
       <nav className="bg-white/80 backdrop-blur-2xl border-b border-slate-100 shadow-sm px-4 sm:px-8 py-3">
-        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto flex items-center">
           
-          {/* 1. BRANDING SECTION */}
-          <div className="flex items-center gap-6">
-            <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white 
-bg-gradient-to-br from-blue-600 via-indigo-500 to-violet-600
-shadow-xl shadow-indigo-300
-group-hover:scale-105 group-hover:shadow-violet-300
-transition-all duration-300">
-  <ShieldCheck size={22} strokeWidth={2.5} />
-</div>
+          {/* Mobile Menu Toggle - Left side on mobile */}
+          <button
+            onClick={() => setOpen(!open)}
+            className="md:hidden p-3 rounded-2xl bg-slate-900 text-white shadow-lg"
+          >
+            {open ? <X size={20} /> : <Menu size={20} />}
+          </button>
 
-              <div className="hidden lg:block leading-none">
-<span className="text-lg font-black tracking-tighter uppercase bg-gradient-to-r from-blue-600 via-indigo-500 to-violet-600 bg-clip-text text-transparent drop-shadow-sm">
-  Compass Tours and Travels
-</span>
-
-                <div className="flex items-center gap-1.5 mt-0.5">
-                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live System</span>
-                </div>
-              </div>
-            </Link>
-
-            {/* 2. SEARCH (DESKTOP) */}
-            {/* <div className="hidden md:flex items-center gap-3 px-5 py-2.5 bg-slate-100/50 rounded-2xl border border-transparent focus-within:border-indigo-200 focus-within:bg-white focus-within:shadow-lg transition-all w-64 lg:w-96">
-              <Search size={18} className="text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search database..."
-                className="bg-transparent outline-none text-sm font-bold text-slate-700 placeholder-slate-400 w-full"
-              />
-            </div> */}
-          </div>
-
-          {/* 3. WALLETS (DESKTOP BENTO) */}
-          <div className="hidden xl:flex items-center gap-3">
+          {/* Wallets - Appear on left side starting from lg screens */}
+          <div className="hidden lg:flex items-center gap-3 ml-6">
             {formattedWallets.map((wallet) => (
               <motion.div
                 key={wallet.key}
@@ -99,7 +73,10 @@ transition-all duration-300">
             ))}
           </div>
 
-          {/* 4. ACTIONS & PROFILE */}
+          {/* Flexible spacer to push right section to the end */}
+          <div className="flex-1" />
+
+          {/* Right section: Notifications + User info */}
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Notification Bell */}
             <Link to="/notifications" className="relative">
@@ -123,28 +100,20 @@ transition-all duration-300">
             {/* Separator */}
             <div className="h-8 w-[1px] bg-slate-100 mx-2 hidden sm:block" />
 
-            {/* User & Logout */}
-            <div className="flex items-center gap-4">
-               <div className="hidden sm:block text-right">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Admin Access</p>
-                  <p className="text-sm font-black text-slate-900 leading-none">{user?.displayName || "Super Admin"}</p>
-               </div>
-               {/* <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={handleLogout}
-                className="p-3 rounded-2xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white border border-red-100 transition-all shadow-sm"
-               >
-                 <LogOut size={20} strokeWidth={2.5} />
-               </motion.button> */}
-
-               {/* Mobile Toggle */}
-              <button
-                onClick={() => setOpen(!open)}
-                className="md:hidden p-3 rounded-2xl bg-slate-900 text-white shadow-lg"
-              >
-                {open ? <X size={20} /> : <Menu size={20} />}
-              </button>
+            {/* User Info */}
+            <div className="hidden sm:block text-right">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Admin Access</p>
+              <p className="text-sm font-black text-slate-900 leading-none">{user?.displayName || "Super Admin"}</p>
             </div>
+
+            {/* Optional Logout Button (uncomment if needed) */}
+            {/* <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={handleLogout}
+              className="p-3 rounded-2xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white border border-red-100 transition-all shadow-sm"
+            >
+              <LogOut size={20} strokeWidth={2.5} />
+            </motion.button> */}
           </div>
         </div>
       </nav>
